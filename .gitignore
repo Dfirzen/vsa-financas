@@ -1,0 +1,11 @@
+node_modules/
+dist-electron/
+dist/
+build/
+data/
+venv/
+__pycache__/
+*.exe
+*.zip
+*.7z
+*.env

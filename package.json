@@ -1,0 +1,43 @@
+{
+  "name": "investai-desktop",
+  "version": "1.0.1",
+  "description": "InvestAI - Dashboard de Investimentos Desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "prebuild": "npx rimraf dist-electron",
+    "build": "electron-builder"
+  },
+  "author": "Diego",
+  "license": "MIT",
+  "dependencies": {
+    "yahoo-finance2": "^2.14.0",
+    "@google/generative-ai": "^0.21.0",
+    "openai": "^4.78.0",
+    "@anthropic-ai/sdk": "latest",
+    "xlsx": "^0.18.5",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.investai.desktop",
+    "productName": "InvestAI",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "Icone.png"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "Icone.png"
+    ]
+  }
+}

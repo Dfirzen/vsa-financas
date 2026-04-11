@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InvestAI - Dashboard Escuro</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- SheetJS (XLSX) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+
+<body>
+    <!-- Modal for Editing Metas -->
+    <div id="meta-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 id="modal-title">Editar Meta</h3>
+            <div class="modal-body">
+                <input type="hidden" id="edit-meta-id">
+                <div class="form-group">
+                    <label>Título da Meta</label>
+                    <input type="text" id="edit-meta-name" class="modal-input">
+                </div>
+                <div class="form-group">
+                    <label>Valor Objetivo (R$)</label>
+                    <input type="number" id="edit-meta-target" class="modal-input" step="100">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline btn-sm" id="btn-cancel-meta">Cancelar</button>
+                <button class="btn-primary btn-sm" id="btn-save-meta">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configurações / Boas-vindas -->
+    <div id="config-modal" class="modal-overlay hidden">
+        <div class="modal-content config-modal-content">
+            <div class="config-modal-header">
+                <div class="config-modal-icon">⚙️</div>
+                <h3 id="config-modal-title">Configurações</h3>
+                <p class="config-modal-desc" id="config-modal-desc">Configure seu aplicativo para começar a usar.</p>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>👤 Seu Nome</label>
+                    <input type="text" id="config-user-name" class="modal-input" placeholder="Ex: Diego">
+                </div>
+                <div class="form-group">
+                    <label>📁 Caminho do Extrato B3 (.xlsx)</label>
+                    <input type="text" id="config-excel-path" class="modal-input" placeholder="Ex: C:\\Users\\Diego\\Downloads\\Extrato.xlsx">
+                    <span class="form-hint">Caminho completo do arquivo no seu computador. Deixe vazio para importar manualmente.</span>
+                </div>
+                <hr class="config-divider">
+                <div class="form-group">
+                    <label>🤖 Provedor de IA</label>
+                    <div class="ai-provider-selector">
+                        <button class="provider-btn active" data-provider="gemini">
+                            <span class="provider-icon">✨</span>
+                            <span class="provider-name">Gemini</span>
+                            <span class="provider-model">gemini-2.0-flash</span>
+                        </button>
+                        <button class="provider-btn" data-provider="openai">
+                            <span class="provider-icon">🟢</span>
+                            <span class="provider-name">ChatGPT</span>
+                            <span class="provider-model">gpt-4o-mini</span>
+                        </button>
+                        <button class="provider-btn" data-provider="anthropic">
+                            <span class="provider-icon">🟠</span>
+                            <span class="provider-name">Claude</span>
+                            <span class="provider-model">claude-3.5-sonnet</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="config-ai-provider" value="gemini">
+                </div>
+                <div class="form-group">
+                    <label id="config-api-key-label">🔑 API Key do Gemini</label>
+                    <input type="password" id="config-ai-key" class="modal-input" placeholder="Cole sua API Key aqui">
+                    <span class="form-hint" id="config-api-key-hint">Gere gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--primary-color);">aistudio.google.com/apikey</a></span>
+                    <span class="config-key-status" id="config-key-status"></span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline btn-sm" id="btn-cancel-config">Cancelar</button>
+                <button class="btn-primary btn-sm" id="btn-save-config">💾 Salvar Configurações</button>
+            </div>
+        </div>
+    </div>
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <header class="top-nav">
+            <div class="nav-left">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2L2 22H22L12 2Z" fill="var(--primary-color)" />
+                            <path d="M12 9L7 19H17L12 9Z" fill="#fff" />
+                        </svg>
+                    </div>
+                    <h2>InvestAI</h2>
+                </div>
+                <nav class="main-menu">
+                    <button class="nav-item active" data-target="visao-geral">Resumo</button>
+                    <button class="nav-item" data-target="proventos">Proventos</button>
+                    <button class="nav-item" data-target="patrimonio">Patrimônio</button>
+                    <button class="nav-item" data-target="rentabilidade">Rentabilidade</button>
+                    <button class="nav-item" data-target="metas">Metas</button>
+                    <button class="nav-item" data-target="analise">Análise</button>
+                </nav>
+            </div>
+
+            <div class="nav-right">
+                <div class="upload-wrapper">
+                    <button class="nav-btn btn-outline" id="btn-upload-label">
+                        <span class="icon">📁</span> Importar Extrato B3
+                    </button>
+                    <input type="file" id="excel-upload" accept=".xlsx" title="Importar Extrato B3">
+                </div>
+                <button class="nav-btn btn-outline" id="btn-refresh-quotes">
+                    <span class="icon">🔄</span> Atualizar Cotações
+                </button>
+                <button class="nav-btn btn-outline" id="btn-open-config" title="Configurações">
+                    <span class="icon">⚙️</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tela 1: Resumo -->
+            <section id="visao-geral" class="screen active">
+                <div class="dashboard-grid">
+
+                    <!-- KPI Cards (4 columns) -->
+                    <div class="summary-cards-row">
+                        <!-- Card 1 -->
+                        <div class="card">
+                            <div class="card-header-kpi">
+                                <h3>Patrimônio total</h3>
+                            </div>
+                            <div class="kpi-main-value">
+                                <span class="kpi-value" id="val-patrimonio">R$ 0,00</span>
+                                <span class="badge-trend negative" id="val-patrimonio-var">0,00% ▾</span>
+                            </div>
+                            <div class="kpi-subtext">
+                                <div class="kpi-subtext-item">
+                                    <span class="kpi-subtext-label">Valor investido</span>
+                                    <span style="font-weight: 500;" id="val-investido">R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2 -->
+                        <div class="card">
+                            <div class="card-header-kpi">
+                                <h3>Lucro total</h3>
+                            </div>
+                            <div class="kpi-main-value">
+                                <span class="kpi-value positive" id="val-lucro">R$ 0,00</span>
+                            </div>
+                            <div class="kpi-subtext">
+                                <div class="kpi-subtext-item">
+                                    <span class="kpi-subtext-label">Ganho de Capital</span>
+                                    <span style="font-weight: 500;" id="val-ganho-cap">R$ 0,00</span>
+                                </div>
+                                <div class="kpi-subtext-item">
+                                    <span class="kpi-subtext-label">Dividendos Recebidos</span>
+                                    <span style="font-weight: 500;" id="val-div-total">R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3 -->
+                        <div class="card">
+                            <div class="card-header-kpi">
+                                <h3>Proventos Recebidos (12M)</h3>
+                            </div>
+                            <div class="kpi-main-value">
+                                <span class="kpi-value" id="val-prov-12m">R$ 0,00</span>
+                            </div>
+                            <div class="kpi-subtext">
+                                <div class="kpi-subtext-item">
+                                    <span class="kpi-subtext-label">Total Ganhos</span>
+                                    <span style="font-weight: 500;" id="val-prov-total">R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 4 -->
+                        <div class="card">
+                            <div class="flex-split">
+                                <div class="flex-col">
+                                    <h3 style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+                                        Variação</h3>
+                                    <div class="kpi-main-value" style="margin-bottom: 0;">
+                                        <span class="badge-trend negative" id="val-var-percent">0,00% ▾</span>
+                                    </div>
+                                    <span class="kpi-subtext-label" id="val-var-abs" style="margin-top: 4px;">R$
+                                        0,00</span>
+                                </div>
+                                <div class="flex-col">
+                                    <h3 style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+                                        Rentabilidade</h3>
+                                    <span class="kpi-value positive" style="font-size: 1.25rem;" id="val-rentab">0,00%
+                                        ↗</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row -->
+                    <div class="charts-row">
+                        <!-- Evolution Chart -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Evolução do Patrimônio</h3>
+                                <div class="filter-group">
+                                    <select class="select-sm" id="evol_time">
+                                        <option>12 Meses</option>
+                                        <option>Desde o Início</option>
+                                    </select>
+                                    <select class="select-sm" id="evol_type_filter">
+                                        <option value="Todos">Todos os tipos</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="chart-container-large">
+                                <canvas id="evolutionBarChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Donut Chart -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Ativos na Carteira</h3>
+                                <div class="filter-group">
+                                    <select class="select-sm" id="alloc_type_filter">
+                                        <option value="Todos">Todos os tipos</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="chart-container-large" style="position: relative;">
+                                <canvas id="allocationDonutChart"></canvas>
+                                <!-- Custom Label over donut will be handled in JS or via plugin -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assets Section -->
+                    <div class="assets-section">
+                        <div class="assets-section-title">
+                            Meus Ativos <span class="assets-count-badge" id="total-assets-count">0</span>
+                        </div>
+
+                        <div class="assets-list" id="assets-list-container">
+                            <!-- JS Will Render the Accordions here -->
+                            <div style="text-align: center; color: var(--text-secondary); padding: 40px;">
+                                Nenhum ativo importado. Faça o upload do extrato B3 (Planilha Excel).
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- Other Screens (Placeholders) -->
+            <!-- Tela 2: Proventos -->
+            <section id="proventos" class="screen">
+                <div class="proventos-layout">
+                    
+                    <!-- Left Sidebar (Resumo) -->
+                    <aside class="proventos-sidebar">
+                        <div class="card p-4">
+                            <h2 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 24px; color: var(--text-primary);">Resumo</h2>
+                            
+                            <div class="provento-summary-item">
+                                <span class="kpi-subtext-label">Média Mensal (últ. 12 meses)</span>
+                                <div class="provento-val-row">
+                                    <span class="kpi-value" id="prov-media-12m" style="font-size: 1.4rem;">R$ 0,00</span>
+                                    <span style="font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;"> / Criar meta ⓘ</span>
+                                    <span style="margin-left: auto; font-size: 0.9rem; font-weight: 600;">0%</span>
+                                </div>
+                                <div class="meta-progress-track mt-8" style="height: 4px;">
+                                    <div class="meta-progress-fill" style="width: 0%; background-color: var(--primary-color);"></div>
+                                </div>
+                            </div>
+
+                            <hr style="border: none; border-top: 1px solid var(--border-color); margin: 24px 0;">
+
+                            <div class="provento-summary-item">
+                                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                    <span class="kpi-subtext-label">Total de 12 meses</span>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                                </div>
+                                <div class="provento-val-row mt-8">
+                                    <span class="kpi-value" id="prov-total-12m" style="font-size: 1.2rem;">R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <hr style="border: none; border-top: 1px solid var(--border-color); margin: 24px 0;">
+
+                            <div class="provento-summary-item">
+                                <span class="kpi-subtext-label">Total da carteira</span>
+                                <div class="provento-val-row mt-8">
+                                    <span class="kpi-value" id="prov-total-carteira" style="font-size: 1.2rem;">R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <hr style="border: none; border-top: 1px solid var(--border-color); margin: 24px 0;">
+
+                            <div class="provento-summary-item">
+                                <span class="kpi-subtext-label" style="margin-bottom: 16px; display: block;">Distribuição de proventos em 12 meses</span>
+                                <div class="chart-container-small" style="height: 200px; position: relative; display: flex; align-items: center; justify-content: center;">
+                                    <canvas id="proventosDonutChart"></canvas>
+                                </div>
+                                <div style="text-align: right; margin-top: 16px;">
+                                    <a href="#" style="color: var(--text-primary); font-size: 0.85rem; text-decoration: none;">Ver todos</a>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <!-- Right Content (Charts and Tables) -->
+                    <div class="proventos-main">
+                        
+                        <!-- Evolução Bar Chart -->
+                        <div class="card proventos-chart-card">
+                            <div class="card-header proventos-card-header">
+                                <h3 style="font-size: 1.1rem; color: var(--text-primary);">Evolução de Proventos</h3>
+                                <div class="filter-group">
+                                    <div class="segmented-control">
+                                        <button class="active" id="prov-btn-mensal">Mensal</button>
+                                        <button id="prov-btn-anual">Anual</button>
+                                    </div>
+                                    <select class="select-sm" id="prov-filter-ano">
+                                        <option value="Todos">Ano: Todos</option>
+                                    </select>
+                                    <select class="select-sm" id="prov-filter-tipo">
+                                        <option value="Todos">Tipo de ativo</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: center; gap: 16px; margin: 16px 0 8px 0; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#4A7CDE; margin-right:6px;"></span>Proventos recebidos</span>
+                                <span><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#6b7280; margin-right:6px;"></span>Proventos a receber ⓘ</span>
+                            </div>
+                            <div class="chart-container-large" style="height: 280px;">
+                                <canvas id="proventosBarChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Histórico Mensal (Table 1) -->
+                        <div class="card proventos-table-card mt-24">
+                            <div class="card-header proventos-card-header">
+                                <h3 style="font-size: 1.1rem; color: var(--text-primary);">Histórico mensal</h3>
+                                <div class="filter-group">
+                                    <span style="font-size: 0.9rem; color: var(--text-primary); font-weight: 500;">Total <span style="color: var(--primary-color);" id="prov-hist-total">R$ 0,00</span></span>
+                                    <select class="select-sm">
+                                        <option>Recebidos</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="proventos-matrix-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ano ↑↓</th>
+                                            <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
+                                            <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+                                            <th>Média ↑↓</th>
+                                            <th>Total ↑↓</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="prov-hist-tbody">
+                                        <!-- JS populates logic here -->
+                                        <tr><td colspan="15" style="text-align:center; padding: 20px;">Nenhum histórico encontrado.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Meus Proventos (Table 2) -->
+                        <div class="card proventos-table-card mt-24">
+                            <div class="card-header proventos-card-header">
+                                <h3 style="font-size: 1.1rem; color: var(--text-primary);">Meus proventos</h3>
+                                <div class="filter-group">
+                                    <span style="font-size: 0.9rem; color: var(--text-primary); font-weight: 500;">Total <span style="color: var(--primary-color);" id="prov-list-total">R$ 0,00</span></span>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="proventos-list-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ativo</th>
+                                            <th>Tipo de ativo</th>
+                                            <th>Status</th>
+                                            <th>Tipo de pagamento</th>
+                                            <th>Data Com</th>
+                                            <th>Data Pagamento</th>
+                                            <th>Quantidade</th>
+                                            <th>Valor do div.</th>
+                                            <th>Valor total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="prov-list-tbody">
+                                        <!-- JS populates logic here -->
+                                        <tr><td colspan="9" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+            <section id="patrimonio" class="screen">
+                <h2>Patrimônio (Em Breve)</h2>
+            </section>
+            <section id="rentabilidade" class="screen">
+                <div class="rentab-layout">
+                    <!-- Sidebar KPIs -->
+                    <aside class="rentab-sidebar">
+                        <!-- Total -->
+                        <div class="card rentab-kpi-card">
+                            <h4 class="rentab-kpi-title">Total</h4>
+                            <span class="kpi-subtext-label">Rentabilidade</span>
+                            <div class="rentab-kpi-value-row">
+                                <span class="rentab-kpi-value" id="rentab-total-pct">0,00%</span>
+                                <span class="rentab-trend-icon positive">↗</span>
+                            </div>
+                            <div class="rentab-comparison-row">
+                                <select class="select-sm rentab-bench-select" id="rentab-total-bench">
+                                    <option value="CDI">0% abaixo do CDI</option>
+                                </select>
+                                <span class="rentab-dropdown-arrow">▼</span>
+                            </div>
+                        </div>
+
+                        <!-- Últimos 12 meses -->
+                        <div class="card rentab-kpi-card">
+                            <h4 class="rentab-kpi-title">Últimos 12 meses</h4>
+                            <span class="kpi-subtext-label">Rentabilidade</span>
+                            <div class="rentab-kpi-value-row">
+                                <span class="rentab-kpi-value" id="rentab-12m-pct">0,00%</span>
+                                <span class="rentab-trend-icon positive">↗</span>
+                            </div>
+                            <div class="rentab-comparison-row">
+                                <select class="select-sm rentab-bench-select" id="rentab-12m-bench">
+                                    <option value="CDI">0% abaixo do CDI</option>
+                                </select>
+                                <span class="rentab-dropdown-arrow">▼</span>
+                            </div>
+                        </div>
+
+                        <!-- Último mês -->
+                        <div class="card rentab-kpi-card">
+                            <h4 class="rentab-kpi-title">Último mês <span style="font-size:0.75rem; color:var(--text-tertiary); cursor:help;">ⓘ</span></h4>
+                            <span class="kpi-subtext-label">Rentabilidade</span>
+                            <div class="rentab-kpi-value-row">
+                                <span class="rentab-kpi-value" id="rentab-1m-pct">0,00%</span>
+                                <span class="rentab-trend-icon positive">↗</span>
+                            </div>
+                            <div class="rentab-comparison-row">
+                                <select class="select-sm rentab-bench-select" id="rentab-1m-bench">
+                                    <option value="CDI">0% acima do CDI</option>
+                                </select>
+                                <span class="rentab-dropdown-arrow">▼</span>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <!-- Main Chart Area -->
+                    <div class="card rentab-chart-card">
+                        <div class="card-header">
+                            <h3>Rentabilidade comparada com índices</h3>
+                            <div class="filter-group">
+                                <select class="select-sm" id="rentab-period-filter">
+                                    <option value="inicio">📅 Desde o início</option>
+                                    <option value="12m">12 Meses</option>
+                                    <option value="6m">6 Meses</option>
+                                    <option value="3m">3 Meses</option>
+                                </select>
+                                <select class="select-sm" id="rentab-type-filter">
+                                    <option value="Todos">Todos os tipos</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Legend -->
+                        <div class="rentab-legend" id="rentab-legend">
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#3B82F6;"></span>Rentabilidade</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#F59E0B;"></span>CDI</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#94A3B8;"></span>IPCA</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#6366F1;"></span>IBOV</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#8B5CF6;"></span>IFIX</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#EC4899;"></span>SMLL</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#14B8A6;"></span>IDIV</span>
+                            <span class="rentab-legend-item"><span class="rentab-dot" style="background:#F97316;"></span>IVVB11</span>
+                        </div>
+                        <div class="chart-container-large" style="height: 340px;">
+                            <canvas id="rentabilidadeLineChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Returns Table -->
+                <div class="card rentab-table-section">
+                    <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">Rentabilidade</h3>
+                    <div class="table-responsive">
+                        <table class="rentab-monthly-table">
+                            <thead>
+                                <tr>
+                                    <th>Ano</th>
+                                    <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
+                                    <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+                                    <th>Ano</th>
+                                    <th>Acumulado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rentab-monthly-tbody">
+                                <tr><td colspan="15" style="text-align:center; padding: 20px; color: var(--text-secondary);">Importe o extrato B3 para visualizar a rentabilidade.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            <section id="metas" class="screen">
+                <!-- Metas em andamento -->
+                <div class="metas-header-main">
+                    <h2 class="metas-section-title">Metas em andamento</h2>
+                    <button class="btn-outline btn-sm" id="btn-create-meta">+ Criar nova meta</button>
+                </div>
+                <div class="dashboard-grid" id="metas-em-andamento">
+                    <div style="text-align: center; color: var(--text-secondary); padding: 40px;">
+                        Carregando metas...
+                    </div>
+                </div>
+
+                <!-- Metas concluídas -->
+                <div class="metas-header-main mt-32">
+                    <h2 class="metas-section-title">Metas concluídas 🎉</h2>
+                </div>
+                <div class="dashboard-grid" id="metas-concluidas">
+                    <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                        Nenhuma meta concluída ainda.
+                    </div>
+                </div>
+            </section>
+            <section id="analise" class="screen">
+                <!-- AI Not Configured Warning -->
+                <div id="ai-setup-banner" class="ai-setup-banner hidden">
+                    <div class="ai-setup-icon">🔑</div>
+                    <div class="ai-setup-text">
+                        <h3>Configure sua IA</h3>
+                        <p>Clique em <strong>⚙️ Configurações</strong> no topo da página para escolher seu provedor de IA e inserir sua API Key.</p>
+                    </div>
+                </div>
+
+                <!-- Auto Analysis Section -->
+                <div class="card ai-analysis-card">
+                    <div class="card-header">
+                        <h3>🤖 Análise Inteligente do Portfólio</h3>
+                        <div class="filter-group">
+                            <button class="btn-outline btn-sm" id="btn-regenerate-analysis">🔄 Gerar Análise</button>
+                        </div>
+                    </div>
+                    <div class="ai-analysis-content" id="ai-analysis-content">
+                        <div class="ai-empty-state">
+                            <div class="ai-empty-icon">📊</div>
+                            <p>Importe seu extrato B3 e clique em <strong>"Gerar Análise"</strong> para receber uma análise completa do seu portfólio por IA.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Section -->
+                <div class="card ai-chat-card">
+                    <div class="card-header">
+                        <h3>💬 Converse com a IA</h3>
+                        <button class="btn-outline btn-sm" id="btn-clear-chat" title="Limpar conversa">🗑️ Limpar</button>
+                    </div>
+                    <div class="ai-chat-messages" id="ai-chat-messages">
+                        <div class="ai-msg ai-msg-bot">
+                            <div class="ai-msg-avatar">🤖</div>
+                            <div class="ai-msg-bubble">
+                                Olá! Sou o <strong>InvestAI</strong>, seu consultor financeiro pessoal. 🚀<br><br>
+                                Importe seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ai-chat-input-wrapper">
+                        <div class="ai-typing-indicator hidden" id="ai-typing">
+                            <span class="ai-typing-dot"></span>
+                            <span class="ai-typing-dot"></span>
+                            <span class="ai-typing-dot"></span>
+                            <span class="ai-typing-text">InvestAI está pensando...</span>
+                        </div>
+                        <div class="ai-chat-input-row">
+                            <input type="text" id="ai-chat-input" class="ai-chat-input" placeholder="Pergunte sobre seus investimentos..." autocomplete="off" />
+                            <button class="ai-chat-send" id="btn-send-chat" title="Enviar">
+                                <span>➤</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Reference to Template for Accordion Row -->
+    <template id="template-asset-group">
+        <div class="asset-group">
+            <div class="asset-group-header">
+                <div class="group-title">
+                    <div class="group-icon">🏢</div>
+                    <span class="group-name">FIIs</span>
+                </div>
+                <div class="group-stat">
+                    <span class="group-stat-label">Ativos</span>
+                    <span class="group-stat-val qtty">0</span>
+                </div>
+                <div class="group-stat">
+                    <span class="group-stat-label">Valor total</span>
+                    <span class="group-stat-val total-val">R$ 0,00</span>
+                </div>
+                <div class="group-stat">
+                    <span class="group-stat-label">Variação ⓘ</span>
+                    <span class="group-stat-val var-pct negative">0,00% ▾</span>
+                </div>
+                <div class="group-stat">
+                    <span class="group-stat-label">Rentabilidade ⓘ</span>
+                    <span class="group-stat-val rent-pct positive">0,00% ↗</span>
+                </div>
+                <div class="group-stat" style="text-align: right; width: 100%; align-items: flex-end;">
+                    <span class="group-stat-label">% na carteira</span>
+                    <span class="group-stat-val part-pct" style="color: var(--text-secondary); font-weight: 500;">0% /
+                        25%</span>
+                </div>
+                <div class="toggle-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 9l6 6 6-6" />
+                    </svg>
+                </div>
+            </div>
+            <div class="asset-group-content">
+                <table class="assets-table">
+                    <thead>
+                        <tr>
+                            <th>Ativo</th>
+                            <th>Quant.</th>
+                            <th>Preço Médio</th>
+                            <th>Preço Atual</th>
+                            <th>Variação</th>
+                            <th>Rentabilidade</th>
+                            <th>Saldo</th>
+                            <th>Nota</th>
+                            <th>% Carteira</th>
+                            <th>% Ideal</th>
+                            <th>Comprar?</th>
+                            <th>Opções</th>
+                        </tr>
+                    </thead>
+                    <tbody class="table-body">
+                        <!-- JS injects rows here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Projeto Finanças
+Comment=Gerenciador Financeiro com Dashboards
+Exec=bash -c 'cd "/media/dfirzen/Games/Projeto Finanças" && ./iniciar_app.sh'
+Icon=/media/dfirzen/Games/Projeto Finanças/icone.png
+Terminal=false
+Categories=Finance;Office;
+Path=/media/dfirzen/Games/Projeto Finanças
