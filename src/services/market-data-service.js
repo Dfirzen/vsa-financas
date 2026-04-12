@@ -22,6 +22,34 @@ class MarketDataService {
         this._yahooFinance = null;
     }
 
+    // --- HELPER: Control Rate Limit ---
+    _delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async _executeWithRetry(apiCallFn, ticker, maxRetries = 2) {
+        let retries = 0;
+        while (retries < maxRetries) {
+            try {
+                return await apiCallFn();
+            } catch (error) {
+                if (retries < maxRetries - 1) {
+                    retries++;
+                    await this._delay(1000);
+                } else {
+                    console.warn(`[API] Falha final ao buscar ${ticker}: ${error.message}`);
+                    throw error;
+                }
+            }
+        }
+        return null;
+    }
+
+    _ensureSuffix(ticker) {
+        if (ticker.endsWith('.SA') || ticker.startsWith('^') || ticker.includes('-')) return ticker;
+        return `${ticker}.SA`;
+    }
+
     async _getYahooFinance() {
         if (!this._yahooFinance) {
             const yf = await import('yahoo-finance2');
@@ -29,7 +57,7 @@ class MarketDataService {
             this._yahooFinance = typeof YFClass === 'function' ? new YFClass() : YFClass;
             // Suppress validation log noise
             try {
-                this._yahooFinance.suppressNotices(['yahooSurvey']);
+                this._yahooFinance.suppressNotices(['yahooSurvey', 'cookie']); // Add cookie warnings to suppression
             } catch (e) { /* ignore */ }
         }
         return this._yahooFinance;
@@ -57,13 +85,10 @@ class MarketDataService {
     }
 
     /**
-     * Get current prices for a list of tickers.
-     * @param {string[]} tickers - e.g. ['PETR4', 'MXRF11']
-     * @param {boolean} forceRefresh
-     * @returns {Object} { 'PETR4': 35.50, ... }
+     * Get current prices for a list of tickers via Google Finance Scraper.
+     * Fast and parallel, avoids Yahoo "crumb" and 429 errors entirely.
      */
     async getPrices(tickers, forceRefresh = false) {
-        const yahooFinance = await this._getYahooFinance();
         const results = {};
         const toFetch = [];
 
@@ -80,28 +105,50 @@ class MarketDataService {
 
         if (toFetch.length === 0) return results;
 
-        for (const ticker of toFetch) {
-            const symbol = ticker.endsWith('.SA') ? ticker : `${ticker}.SA`;
+        // Process concurrently via Google Finance
+        const fetchPromises = toFetch.map(async (ticker) => {
             try {
-                const quote = await yahooFinance.quote(symbol);
-                if (quote && quote.regularMarketPrice) {
-                    const currentPrice = quote.regularMarketPrice;
-                    results[ticker] = currentPrice;
-                    this.cache[ticker] = {
-                        price: currentPrice,
-                        timestamp: Date.now() / 1000
-                    };
-                } else if (this.cache[ticker]) {
-                    results[ticker] = this.cache[ticker].price;
+                const cleanTicker = ticker.replace('.SA', '');
+                const res = await fetch(`https://www.google.com/finance/quote/${cleanTicker}:BVMF`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 5000
+                });
+                
+                if (res.ok) {
+                    const html = await res.text();
+                    const match = html.match(/class="YMlKec fxKbKc"[^>]*>R\$\s*([0-9.,]+)/);
+                    if (match) {
+                        let val = match[1];
+                        if (val.includes(',') && val.includes('.')) {
+                            if (val.indexOf(',') > val.indexOf('.')) {
+                                val = val.replace(/\./g, '').replace(',', '.');
+                            } else {
+                                val = val.replace(/,/g, '');
+                            }
+                        } else if (val.includes(',')) {
+                            val = val.replace(',', '.');
+                        }
+                        const currentPrice = parseFloat(val);
+                        
+                        results[ticker] = currentPrice;
+                        this.cache[ticker] = {
+                            price: currentPrice,
+                            timestamp: Date.now() / 1000
+                        };
+                        return;
+                    }
                 }
+                
+                throw new Error("Could not parse Google Finance HTML");
             } catch (e) {
-                console.error(`MarketDataService Error fetching ${ticker}: ${e.message}`);
+                console.warn(`[GoogleFinance] Failed to fetch ${ticker}, returning cache. (${e.message})`);
                 if (this.cache[ticker]) {
                     results[ticker] = this.cache[ticker].price;
                 }
             }
-        }
+        });
 
+        await Promise.all(fetchPromises);
         this._saveCache();
         return results;
     }
@@ -123,17 +170,17 @@ class MarketDataService {
         // IPCA from BCB (series 433)
         result['IPCA'] = await this._fetchBcbSeries(433);
 
-        // B3 indices via yahoo-finance2
-        const yfIndices = {
-            'IBOV': '^BVSP',
-            'IFIX': 'IFIX.SA',
-            'SMLL': 'SMAL11.SA',
-            'IDIV': 'DIVO11.SA',
-            'IVVB11': 'IVVB11.SA'
+        // B3 indices via Stooq (free, no API key needed)
+        const stooqIndices = {
+            'IBOV': '^bvsp',
+            'IFIX': 'ifix.in',
+            'IVVB11': 'ivvb11.sa',
+            'SMLL': 'smal11.sa',
+            'IDIV': 'divo11.sa'
         };
 
-        for (const [name, ticker] of Object.entries(yfIndices)) {
-            result[name] = await this._fetchYfMonthlyReturns(ticker);
+        for (const [name, ticker] of Object.entries(stooqIndices)) {
+            result[name] = await this._fetchStooqMonthlyReturns(ticker);
         }
 
         // Cache result
@@ -163,53 +210,56 @@ class MarketDataService {
         return {};
     }
 
-    async _fetchYfMonthlyReturns(ticker) {
+    /**
+     * Fetch monthly returns via Stooq CSV (free, no key, supports B3 tickers).
+     * URL: https://stooq.com/q/d/l/?s=petr4.sa&i=m
+     */
+    async _fetchStooqMonthlyReturns(symbol) {
         try {
-            const yahooFinance = await this._getYahooFinance();
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setFullYear(startDate.getFullYear() - 2);
-
-            const result = await yahooFinance.chart(ticker, {
-                period1: startDate,
-                period2: endDate,
-                interval: '1d'
+            const url = `https://stooq.com/q/d/l/?s=${symbol.toLowerCase()}&i=m`;
+            const resp = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                timeout: 10000
             });
 
-            if (result && result.quotes && result.quotes.length > 0) {
-                // Build monthly close prices
-                const monthlyCloses = {};
-                for (const quote of result.quotes) {
-                    if (quote.close && quote.date) {
-                        const d = new Date(quote.date);
-                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                        monthlyCloses[key] = quote.close;
-                    }
-                }
+            if (!resp.ok) return {};
 
-                // Calculate monthly returns
-                const sortedMonths = Object.keys(monthlyCloses).sort();
-                const returns = {};
-                for (let i = 1; i < sortedMonths.length; i++) {
-                    const prev = monthlyCloses[sortedMonths[i - 1]];
-                    const curr = monthlyCloses[sortedMonths[i]];
-                    if (prev > 0) {
-                        const pct = ((curr / prev) - 1) * 100;
-                        returns[sortedMonths[i]] = Math.round(pct * 10000) / 10000;
-                    }
+            const csv = await resp.text();
+            const lines = csv.trim().split('\n');
+            if (lines.length < 2) return {};
+
+            const monthlyCloses = {};
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',');
+                if (cols.length < 5) continue;
+                const dateStr = cols[0]; // YYYY-MM-DD
+                const closeVal = parseFloat(cols[4]);
+                if (!isNaN(closeVal) && dateStr) {
+                    const key = dateStr.substring(0, 7); // YYYY-MM
+                    monthlyCloses[key] = closeVal;
                 }
-                return returns;
             }
+
+            const sortedMonths = Object.keys(monthlyCloses).sort();
+            const returns = {};
+            for (let i = 1; i < sortedMonths.length; i++) {
+                const prev = monthlyCloses[sortedMonths[i - 1]];
+                const curr = monthlyCloses[sortedMonths[i]];
+                if (prev > 0) {
+                    const pct = ((curr / prev) - 1) * 100;
+                    returns[sortedMonths[i]] = Math.round(pct * 10000) / 10000;
+                }
+            }
+            return returns;
         } catch (e) {
-            console.error(`Error fetching yfinance ${ticker}: ${e.message}`);
+            console.warn(`[Stooq] Failed to fetch benchmark ${symbol}: ${e.message}`);
+            return {};
         }
-        return {};
     }
 
     // ========== PREÇOS MENSAIS HISTÓRICOS ==========
 
     async getMonthlyPrices(tickers, period = '2y') {
-        const yahooFinance = await this._getYahooFinance();
         const results = {};
         const toFetch = [];
 
@@ -223,39 +273,55 @@ class MarketDataService {
             }
         }
 
-        for (const ticker of toFetch) {
-            const symbol = ticker.endsWith('.SA') ? ticker : `${ticker}.SA`;
+        // Parallel fetch via Stooq (free historical CSV)
+        const fetchPromises = toFetch.map(async (ticker) => {
+            const cleanTicker = ticker.replace('.SA', '').toLowerCase();
+            const symbol = `${cleanTicker}.sa`;
             try {
-                const endDate = new Date();
-                const startDate = new Date();
-                const years = parseInt(period) || 2;
-                startDate.setFullYear(startDate.getFullYear() - years);
-
-                const result = await yahooFinance.chart(symbol, {
-                    period1: startDate,
-                    period2: endDate,
-                    interval: '1d'
+                const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d`;
+                const resp = await fetch(url, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 10000
                 });
 
-                if (result && result.quotes && result.quotes.length > 0) {
-                    const prices = {};
-                    for (const quote of result.quotes) {
-                        if (quote.close && quote.date) {
-                            const d = new Date(quote.date);
-                            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                            prices[key] = Math.round(quote.close * 100) / 100;
-                        }
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+                const csv = await resp.text();
+                const lines = csv.trim().split('\n');
+                if (lines.length < 2) throw new Error('Empty CSV');
+
+                const prices = {};
+                const years = parseInt(period) || 2;
+                const cutoff = new Date();
+                cutoff.setFullYear(cutoff.getFullYear() - years);
+
+                for (let i = 1; i < lines.length; i++) {
+                    const cols = lines[i].split(',');
+                    if (cols.length < 5) continue;
+                    const dateStr = cols[0]; // YYYY-MM-DD
+                    const closeVal = parseFloat(cols[4]);
+                    const dateObj = new Date(dateStr);
+                    if (!isNaN(closeVal) && dateObj >= cutoff) {
+                        const key = dateStr.substring(0, 7); // YYYY-MM
+                        prices[key] = Math.round(closeVal * 100) / 100;
                     }
-                    results[ticker] = prices;
-                    this.cache[`__monthly_${ticker}__`] = {
-                        prices,
-                        timestamp: Date.now() / 1000
-                    };
                 }
+
+                results[ticker] = prices;
+                this.cache[`__monthly_${ticker}__`] = {
+                    prices,
+                    timestamp: Date.now() / 1000
+                };
             } catch (e) {
-                console.error(`Error fetching monthly history for ${ticker}: ${e.message}`);
+                console.warn(`[Stooq] Failed monthly prices for ${ticker}: ${e.message}`);
+                const cacheKey = `__monthly_${ticker}__`;
+                if (this.cache[cacheKey]) {
+                    results[ticker] = this.cache[cacheKey].prices;
+                }
             }
-        }
+        });
+
+        await Promise.all(fetchPromises);
 
         if (toFetch.length > 0) {
             this._saveCache();
@@ -268,3 +334,5 @@ class MarketDataService {
 // Singleton
 const marketDataService = new MarketDataService();
 module.exports = { marketDataService };
+
+

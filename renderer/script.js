@@ -1,4 +1,38 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // ==== TEMA (DARK/LIGHT MODE) ====
+    const btnThemeToggle = document.getElementById('btn-theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    
+    // Inicia com o tema guardado ou padrão escuro
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+        if (themeIcon) themeIcon.textContent = '🌙';
+    } else {
+        if (themeIcon) themeIcon.textContent = '☀️';
+    }
+
+    if (btnThemeToggle) {
+        btnThemeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('light-mode');
+            const isLight = document.body.classList.contains('light-mode');
+            if (isLight) {
+                localStorage.setItem('theme', 'light');
+                themeIcon.textContent = '🌙';
+            } else {
+                localStorage.setItem('theme', 'dark');
+                themeIcon.textContent = '☀️';
+            }
+            
+            // Re-renderizar gráficos para aplicar nova paleta de cor dinâmica (ex: datalabels)
+            if (typeof charts !== 'undefined') {
+                Object.values(charts).forEach(chart => {
+                    if (chart && typeof chart.update === 'function') chart.update();
+                });
+            }
+        });
+    }
+
     // ==== NAVEGAÇÃO ENTRE TELAS ====
     const navItems = document.querySelectorAll('.nav-item');
     const screens = document.querySelectorAll('.screen');
@@ -12,10 +46,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetId = item.getAttribute('data-target');
             if (targetId) {
                 const targetScreen = document.getElementById(targetId);
-                if (targetScreen) targetScreen.classList.add('active');
+                if (targetScreen) {
+                    targetScreen.classList.add('active');
+                    // Antigravity GSAP Animation
+                    if (typeof gsap !== 'undefined') {
+                        gsap.fromTo(targetScreen.querySelectorAll('.card, .chart-container, table, .btn-primary'), 
+                            { y: 30, opacity: 0 }, 
+                            { y: 0, opacity: 1, duration: 0.6, stagger: 0.05, ease: "power3.out", clearProps: "all" }
+                        );
+                    }
+                }
             }
         });
     });
+
+    // Antigravity initial load animation
+    if (typeof gsap !== 'undefined') {
+        gsap.fromTo('.active .card, .active .chart-container, .active table', 
+            { y: 30, opacity: 0 }, 
+            { y: 0, opacity: 1, duration: 0.8, stagger: 0.1, ease: "power3.out", clearProps: "all", delay: 0.2 }
+        );
+    }
 
     // ==== ESTADO DOS GRÁFICOS ====
     let charts = {
@@ -63,7 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (value === 0) return '';
                                 return value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                             },
-                            color: '#F9FAFB',
+                            color: function() {
+                                return document.body.classList.contains('light-mode') ? '#111827' : '#F9FAFB';
+                            },
                             font: { size: 14, weight: 'bold' }
                         }
                     },
@@ -650,13 +703,47 @@ document.addEventListener('DOMContentLoaded', () => {
             clone.querySelector('.part-pct').textContent = `⌚ ${pctCarteira}% / 25%`; // Mocking 25% ideal
 
             header.addEventListener('click', () => {
-                groupDiv.classList.toggle('expanded');
+                const isExpanded = groupDiv.classList.contains('expanded');
+                const content = groupDiv.querySelector('.asset-group-content');
+                const tbodyRows = groupDiv.querySelectorAll('.table-body tr');
+
+                if (!isExpanded) {
+                    // Abrir
+                    groupDiv.classList.add('expanded');
+                    if (typeof gsap !== 'undefined') {
+                        gsap.fromTo(content, 
+                            { height: 0, opacity: 0 }, 
+                            { height: "auto", opacity: 1, duration: 0.5, ease: "power3.out" }
+                        );
+                        // Efeito dominó nas linhas da tabela
+                        if (tbodyRows && tbodyRows.length > 0) {
+                            gsap.fromTo(tbodyRows, 
+                                { y: 15, opacity: 0 }, 
+                                { y: 0, opacity: 1, duration: 0.4, stagger: 0.04, ease: "power2.out", delay: 0.1 }
+                            );
+                        }
+                    }
+                } else {
+                    // Fechar
+                    if (typeof gsap !== 'undefined') {
+                        gsap.to(content, { 
+                            height: 0, opacity: 0, duration: 0.4, ease: "power3.in", 
+                            onComplete: () => {
+                                groupDiv.classList.remove('expanded');
+                                gsap.set(content, { clearProps: "all" });
+                                gsap.set(tbodyRows, { clearProps: "all" });
+                            }
+                        });
+                    } else {
+                        groupDiv.classList.remove('expanded');
+                    }
+                }
             });
 
             // Populate Table
             const tbody = clone.querySelector('.table-body');
             if (activeKeys.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; color: var(--text-tertiary)">Nenhum ativo nesta categoria.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color: var(--text-tertiary)">Nenhum ativo nesta categoria.</td></tr>`;
             } else {
                 activeKeys.forEach(ticker => {
                     const ativo = cat.ativos[ticker];
@@ -665,6 +752,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const isPos = currentPrice >= avgPrice;
                     const pctDiff = avgPrice > 0 ? ((currentPrice / avgPrice) - 1) * 100 : 0;
+
+                    // Cálculo do Número Mágico (Preço Atual / Rendimento Mensal Médio por cota, ultimos 12 meses)
+                    let magicNumberText = "-";
+                    if (window.dashboardState && window.dashboardState.yieldTransactions) {
+                        const yieldsForAsset = window.dashboardState.yieldTransactions.filter(t => t.ticker === ticker);
+                        if (yieldsForAsset.length > 0 && currentPrice > 0) {
+                            let monthlyMap = {};
+                            yieldsForAsset.forEach(t => {
+                                if (t.quant > 0) {
+                                    if (!monthlyMap[t.monthKey]) monthlyMap[t.monthKey] = [];
+                                    monthlyMap[t.monthKey].push(t.valTotal / t.quant);
+                                }
+                            });
+                            let months = Object.keys(monthlyMap).sort().slice(-12); // Pega os últimos 12 meses registrados
+                            if (months.length > 0) {
+                                let sumAvg = 0;
+                                months.forEach(m => {
+                                    // Média de pagamentos no mesmo mês (caso haja > 1)
+                                    sumAvg += monthlyMap[m].reduce((a, b) => a + b, 0) / monthlyMap[m].length;
+                                });
+                                let avgMonthYield = sumAvg / months.length;
+                                if (avgMonthYield > 0) {
+                                    let mgNum = Math.ceil(currentPrice / avgMonthYield);
+                                    magicNumberText = mgNum.toString();
+                                }
+                            }
+                        }
+                    }
 
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
@@ -675,16 +790,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </td>
                         <td>${ativo.quant.toLocaleString('pt-BR')}</td>
+                        <td><span style="font-weight:600; color:var(--text-primary);">${magicNumberText}</span></td>
                         <td>${avgPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                         <td>${currentPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} <span style="font-size: 0.6rem; color: var(--text-tertiary)">✍️</span></td>
                         <td><span class="badge-trend ${isPos ? 'positive' : 'negative'}">${pctDiff > 0 ? '+' : ''}${pctDiff.toFixed(2)}% ${isPos ? '▴' : '▾'}</span></td>
-                        <td><span style="color:var(--warning-color); font-weight:600;">0% →</span></td>
                         <td>${ativo.totalVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ${isPos ? '↗' : '↘'}</td>
-                        <td><span style="background:var(--bg-app); padding:4px 8px; border-radius:4px;">10</span></td>
                         <td>${globalTotal > 0 ? ((ativo.totalVal / globalTotal) * 100).toFixed(2) : 0}%</td>
                         <td>6,25%</td>
                         <td><span class="buy-badge">⊗ Não</span></td>
-                        <td style="text-align:center; color: var(--text-tertiary); cursor:pointer;">•••</td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -1301,6 +1414,38 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const { categories, yieldTransactions, investTransactions, proventosTotais } = window.dashboardState;
         
+        const metasYearSel = document.getElementById('metas-year-selector');
+        let selectedYear = String(new Date().getFullYear());
+        if (metasYearSel && investTransactions) {
+            if (metasYearSel.options.length <= 1) { 
+                const years = new Set([new Date().getFullYear()]);
+                investTransactions.forEach(t => {
+                    if (t.monthKey && t.monthKey.length >= 4) {
+                        years.add(parseInt(t.monthKey.substring(0, 4)));
+                    }
+                });
+                const sortedYears = Array.from(years).sort((a,b) => b - a);
+                metasYearSel.innerHTML = '';
+                sortedYears.forEach(y => {
+                    const opt = document.createElement('option');
+                    opt.value = y;
+                    opt.textContent = y;
+                    if (y === new Date().getFullYear()) opt.selected = true;
+                    metasYearSel.appendChild(opt);
+                });
+                if (!metasYearSel.dataset.listenerAttached) {
+                    metasYearSel.addEventListener('change', () => {
+                        applyB3DataToMetas();
+                        renderMetas();
+                    });
+                    metasYearSel.dataset.listenerAttached = 'true';
+                }
+            }
+            selectedYear = metasYearSel.value;
+        }
+
+        const currentYear = selectedYear;
+
         // Calculate patrimônio atual
         let currentPatrimonio = 0;
         Object.keys(categories).forEach(cat => {
@@ -1308,28 +1453,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Calculate média mensal de proventos
-        const monthsSet = new Set(yieldTransactions?.map(t => t.monthKey) || []);
-        const avgProv = monthsSet.size > 0 ? (proventosTotais / monthsSet.size) : 0;
+        let proventosAno = 0;
+        const monthsSet = new Set();
+        (yieldTransactions || []).forEach(t => {
+            if (t.monthKey && t.monthKey.startsWith(currentYear)) {
+                proventosAno += t.valTotal;
+                monthsSet.add(t.monthKey);
+            }
+        });
+        const avgProv = monthsSet.size > 0 ? (proventosAno / monthsSet.size) : 0;
 
-        // Calculate aportes
-        const now = new Date();
-        const currentYear = String(now.getFullYear());
-        const currentMonthKey = `${currentYear}${String(now.getMonth() + 1).padStart(2, '0')}`;
-        
+        // Calculate aportes based on selected year
         let aporteAnual = 0;
-        let aportesMensais = {};
+        let aportesMensaisAno = {};
+        let aportesMensaisAll = {};
         (investTransactions || []).forEach(t => {
             if (t.type === 'buy' && t.monthKey.startsWith(currentYear)) {
                 aporteAnual += Math.abs(t.value);
+                if (!aportesMensaisAno[t.monthKey]) aportesMensaisAno[t.monthKey] = 0;
+                aportesMensaisAno[t.monthKey] += Math.abs(t.value);
             }
             if (t.type === 'buy') {
-                if (!aportesMensais[t.monthKey]) aportesMensais[t.monthKey] = 0;
-                aportesMensais[t.monthKey] += Math.abs(t.value);
+                if (!aportesMensaisAll[t.monthKey]) aportesMensaisAll[t.monthKey] = 0;
+                aportesMensaisAll[t.monthKey] += Math.abs(t.value);
             }
         });
-        const mesesComAporte = Object.keys(aportesMensais);
+        const mesesComAporte = Object.keys(aportesMensaisAno);
         const aporteMensalMedio = mesesComAporte.length > 0 ? 
-            mesesComAporte.reduce((acc, k) => acc + aportesMensais[k], 0) / mesesComAporte.length : 0;
+            mesesComAporte.reduce((acc, k) => acc + aportesMensaisAno[k], 0) / mesesComAporte.length : 0;
 
         currentMetas.forEach(meta => {
             switch(meta.id) {
@@ -1341,6 +1492,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'aporte_mensal':
                     meta.value_current = aporteMensalMedio;
+                    meta.history = aportesMensaisAll;
                     break;
                 case 'aporte_anual':
                     meta.value_current = aporteAnual;
@@ -1398,6 +1550,87 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `).join('');
 
+            let progressWrapperHTML = `
+                <div class="meta-progress-wrapper">
+                    <div class="meta-percentage ${isCompleted ? 'right' : ''}">${perc.toFixed(2)}%</div>
+                    <div class="meta-progress-track">
+                        <div class="meta-progress-fill" style="width: ${perc}%; background-color: ${progressColor};"></div>
+                    </div>
+                </div>
+            `;
+
+            if (meta.id === 'aporte_mensal' && meta.history) {
+                let barsHTML = '';
+                const months = [];
+                const metasYearSel = document.getElementById('metas-year-selector');
+                const selectedYear = metasYearSel ? parseInt(metasYearSel.value) : new Date().getFullYear();
+                
+                for(let i=0; i<12; i++) {
+                    const d = new Date(selectedYear, i, 1);
+                    months.push({
+                        key: `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`,
+                        label: d.toLocaleString('pt-BR', {month: 'short'}).toUpperCase().replace('.', '')
+                    });
+                }
+                
+                let maxVal = meta.value_target;
+                months.forEach(m => {
+                    const val = meta.history[m.key] || 0;
+                    if (val > maxVal) maxVal = val;
+                });
+                maxVal = maxVal * 1.1;
+
+                months.forEach(m => {
+                    const val = meta.history[m.key] || 0;
+                    const target = meta.value_target;
+                    
+                    let barColor = 'var(--danger-color, #EF4444)';
+                    let iconHtml = '';
+                    
+                    if (val >= target) {
+                        barColor = '#10B981';
+                        if (val > target) {
+                            iconHtml = '<div style="position:absolute; top:-22px; left:50%; transform:translateX(-50%); text-shadow: 0 0 5px rgba(0,0,0,0.5); font-size:16px; z-index:2;">⭐</div>';
+                        }
+                    }
+                    
+                    const heightPct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+                    const formattedVal = val.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+                    
+                    barsHTML += `
+                        <div class="meta-bar-col" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; position:relative; height:120px;" title="${m.label}: ${formattedVal}">
+                            <div style="position:relative; width:80%; max-width:25px; height:100%; display:flex; align-items:flex-end; justify-content:center; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                                ${iconHtml}
+                                <div style="width: 100%; background-color: ${barColor}; height: ${heightPct}%; border-radius: 4px 4px 0 0; transition: height 0.3s; position:relative; z-index: 1;"></div>
+                            </div>
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-align: center;">${m.label}</span>
+                        </div>
+                    `;
+                });
+
+                const targetLinePct = maxVal > 0 ? (meta.value_target / maxVal) * 100 : 0;
+                progressWrapperHTML = `
+                    <div class="meta-bar-chart" style="display:flex; justify-content:space-between; align-items:flex-end; height:150px; margin-top:20px; position: relative;">
+                        <div style="position: absolute; left: 0; right: 0; bottom: 20px; height: 120px; pointer-events: none;">
+                            <div style="position: absolute; bottom: ${targetLinePct}%; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,0.3); z-index: 0;"></div>
+                            <span style="position: absolute; bottom: ${targetLinePct}%; left: 0; font-size: 0.6rem; color: rgba(255,255,255,0.5); transform: translateY(-100%);">${formatCurrency(meta.value_target)}</span>
+                        </div>
+                        ${barsHTML}
+                    </div>
+                `;
+
+                statsHTML = `
+                    <div class="meta-stat-box">
+                        <span class="meta-stat-label">Média Mensal</span>
+                        <span class="meta-stat-val">${formatCurrency(meta.value_current)}</span>
+                    </div>
+                    <div class="meta-stat-box" style="grid-column: span 2;">
+                        <span class="meta-stat-label">Objetivo</span>
+                        <span class="meta-stat-val">${formatCurrency(meta.value_target)}</span>
+                    </div>
+                `;
+            }
+
             const cardHTML = `
                 <div class="meta-card" data-meta-id="${meta.id}">
                     <div class="meta-card-header">
@@ -1410,13 +1643,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button class="meta-options meta-delete-btn" onclick="window.deleteMeta('${meta.id}')" title="Excluir">🗑️</button>
                         </div>
                     </div>
-                    <div class="meta-progress-wrapper">
-                        <div class="meta-percentage ${isCompleted ? 'right' : ''}">${perc.toFixed(2)}%</div>
-                        <div class="meta-progress-track">
-                            <div class="meta-progress-fill" style="width: ${perc}%; background-color: ${progressColor};"></div>
-                        </div>
-                    </div>
-                    <div class="meta-stats-grid grid-3">
+                    ${progressWrapperHTML}
+                    <div class="meta-stats-grid grid-3" style="margin-top: 15px;">
                         ${statsHTML}
                     </div>
                 </div>

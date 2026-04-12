@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https://fonts.googleapis.com https://fonts.gstatic.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https://fonts.googleapis.com https://fonts.gstatic.com;">
     <title>InvestAI - Dashboard de Investimentos</title>
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,10 +17,19 @@
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <!-- Marked.js for Markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- GSAP for Antigravity buttery smooth animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
+    <!-- Background Mesh Effect for Antigravity Vibe -->
+    <div class="mesh-bg">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
     <!-- Modal for Editing Metas -->
     <div id="meta-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -131,6 +140,9 @@
                 </div>
                 <button class="nav-btn btn-outline" id="btn-refresh-quotes">
                     <span class="icon">🔄</span> Atualizar Cotações
+                </button>
+                <button class="nav-btn btn-outline" id="btn-theme-toggle" title="Alternar Tema Claro/Escuro">
+                    <span class="icon" id="theme-icon">☀️</span>
                 </button>
                 <button class="nav-btn btn-outline" id="btn-open-config" title="Configurações">
                     <span class="icon">⚙️</span>
@@ -534,7 +546,12 @@
             <section id="metas" class="screen">
                 <!-- Metas em andamento -->
                 <div class="metas-header-main">
-                    <h2 class="metas-section-title">Metas em andamento</h2>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <h2 class="metas-section-title" style="margin-bottom: 0;">Metas em andamento</h2>
+                        <select class="select-sm" id="metas-year-selector" style="font-size: 0.95rem; padding: 4px 24px 4px 10px; background-color: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; cursor: pointer;">
+                            <option value="2026">2026</option>
+                        </select>
+                    </div>
                     <button class="btn-outline btn-sm" id="btn-create-meta">+ Criar nova meta</button>
                 </div>
                 <div class="dashboard-grid" id="metas-em-andamento">
@@ -655,16 +672,14 @@
                         <tr>
                             <th>Ativo</th>
                             <th>Quant.</th>
+                            <th>Nº Mágico</th>
                             <th>Preço Médio</th>
                             <th>Preço Atual</th>
                             <th>Variação</th>
-                            <th>Rentabilidade</th>
                             <th>Saldo</th>
-                            <th>Nota</th>
                             <th>% Carteira</th>
                             <th>% Ideal</th>
                             <th>Comprar?</th>
-                            <th>Opções</th>
                         </tr>
                     </thead>
                     <tbody class="table-body">
