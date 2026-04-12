@@ -1,12 +1,61 @@
+# ========================
+# Dependências
+# ========================
 node_modules/
+venv/
+__pycache__/
+
+# ========================
+# Build / Output
+# ========================
 dist-electron/
 dist/
 build/
-data/
-venv/
-__pycache__/
 *.exe
 *.zip
 *.7z
+*.asar
+
+# ========================
+# Dados locais / Cache
+# ========================
+data/
+*.json.bak
+
+# ========================
+# Arquivos pessoais / Planilhas
+# ========================
+*.xlsx
+*.xls
+*.csv
+Meus*
+
+# ========================
+# Arquivos de debug e testes temporários
+# ========================
+test*.js
+test*.html
+*_debug.html
+*_debug.js
+scratch/
+
+# ========================
+# Variáveis de ambiente
+# ========================
+.env
+.env.*
 *.env
+
+# ========================
+# Sistema Operacional
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
 .~lock.*
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
