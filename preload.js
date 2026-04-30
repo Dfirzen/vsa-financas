@@ -22,12 +22,27 @@ contextBridge.exposeInMainWorld('api', {
     getQuotes: (tickers, force) => ipcRenderer.invoke('get-quotes', tickers, force),
     getIndices: () => ipcRenderer.invoke('get-indices'),
     getMonthlyPrices: (tickers, period) => ipcRenderer.invoke('get-monthly-prices', tickers, period),
+    getNextDividends: (tickers) => ipcRenderer.invoke('get-next-dividends', tickers),
 
     // AI
     aiStatus: () => ipcRenderer.invoke('ai-status'),
     aiAnalyze: (data) => ipcRenderer.invoke('ai-analyze', data),
     aiChat: (data) => ipcRenderer.invoke('ai-chat', data),
 
+    // Strategy (persistent memory)
+    getStrategy: () => ipcRenderer.invoke('get-strategy'),
+    inferStrategy: (data) => ipcRenderer.invoke('infer-strategy', data),
+
+    // Conversations (multi-chat history)
+    getConversations: () => ipcRenderer.invoke('get-conversations'),
+    getActiveConversation: () => ipcRenderer.invoke('get-active-conversation'),
+    getConversationMessages: (id) => ipcRenderer.invoke('get-conversation-messages', id),
+    createConversation: (title) => ipcRenderer.invoke('create-conversation', title),
+    setActiveConversation: (id) => ipcRenderer.invoke('set-active-conversation', id),
+    deleteConversation: (id) => ipcRenderer.invoke('delete-conversation', id),
+    renameConversation: (id, title) => ipcRenderer.invoke('rename-conversation', id, title),
+
     // Native dialogs
     selectFile: (options) => ipcRenderer.invoke('select-file', options)
 });
+

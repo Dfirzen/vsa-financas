@@ -3,7 +3,7 @@
  * Integration with Google Gemini, OpenAI, and Anthropic for portfolio analysis.
  */
 
-const SYSTEM_PROMPT = `Você é o **InvestAI**, um consultor financeiro pessoal integrado a um dashboard de investimentos.
+const SYSTEM_PROMPT = `Você é o assistente **V S & A** (Visão, Solidez & Autonomia), um consultor financeiro pessoal integrado a um dashboard de investimentos.
 
 Seu papel é analisar o portfólio do investidor e fornecer insights personalizados, claros e acionáveis.
 
@@ -17,10 +17,11 @@ Seu papel é analisar o portfólio do investidor e fornecer insights personaliza
 7. Considere o perfil do investidor com base nos dados (conservador, moderado, arrojado)
 8. Sempre relacione sugestões com as **metas** do investidor quando disponíveis
 9. Se souber o nome do investidor, chame pelo nome para tornar a conversa mais pessoal
+10. Você tem memória da **estratégia de investimento** do usuário — use-a em todas as respostas
 
 ## Ao fazer análise automática, cubra:
 - 📊 **Visão Geral** do portfólio
-- 🎯 **Progresso das Metas** 
+- 🎯 **Progresso das Metas**
 - ⚠️ **Pontos de Atenção** (concentração, risco, etc)
 - 💡 **Sugestões** práticas e acionáveis
 - 📈 **Projeções** baseadas no ritmo atual
@@ -72,11 +73,15 @@ class AIService {
         return !!(this._apiKey && this._model);
     }
 
-    _getSystemWithName() {
+    _buildSystemPrompt(strategyText = '') {
+        let prompt = SYSTEM_PROMPT;
         if (this._userName) {
-            return SYSTEM_PROMPT + `\n\nO nome do investidor é **${this._userName}**. Chame-o pelo nome.`;
+            prompt += `\n\nO nome do investidor é **${this._userName}**. Chame-o pelo nome.`;
         }
-        return SYSTEM_PROMPT;
+        if (strategyText) {
+            prompt += `\n\n## ESTRATÉGIA ATUAL DO INVESTIDOR (memória persistente):\n${strategyText}\n\nConsidere esta estratégia como contexto base para TODAS as suas respostas. Nunca peça ao usuário para explicar sua estratégia — você já a conhece.`;
+        }
+        return prompt;
     }
 
     _buildPortfolioContext(portfolioData) {
@@ -148,23 +153,42 @@ class AIService {
     // ==========================================
     // GEMINI
     // ==========================================
-    async _geminiAnalyze(context) {
-        const prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
-        const response = await this._model.generateContent(prompt);
+    async _geminiAnalyze(context, strategyText = '', analysisType = 'geral') {
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(this._apiKey);
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-2.0-flash',
+            systemInstruction: this._buildSystemPrompt(strategyText)
+        });
+        let prompt = '';
+        if (analysisType === 'ativos_vs_metas') {
+            prompt = `Analise a relação entre os Ativos do portfólio e as Metas do investidor.\n\n${context}\n\nForneça uma análise concisa focada exclusivamente em:\n1. Alinhamento da carteira com as metas.\n2. Ajustes recomendados para acelerar a conquista.\nSeja direto e prático, sem análises longas genéricas.`;
+        } else {
+            prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
+        }
+        const response = await model.generateContent(prompt);
         return response.response.text();
     }
 
-    async _geminiChat(sessionId, message, portfolioData = null) {
+    async _geminiChat(sessionId, message, portfolioData = null, strategyText = '') {
         if (!this.chatSessions[sessionId]) {
             const context = portfolioData ? this._buildPortfolioContext(portfolioData) : '';
             const history = [];
             if (context) {
                 history.push(
                     { role: 'user', parts: [{ text: `Aqui estão os dados do meu portfólio para contexto:\n\n${context}\n\nPor favor, leve esses dados em consideração em todas as respostas.` }] },
-                    { role: 'model', parts: [{ text: 'Entendido! Analisei todos os dados do seu portfólio. Estou pronto para responder suas dúvidas e fornecer sugestões personalizadas com base nos seus investimentos, metas e performance. Como posso ajudar? 🚀' }] }
+                    { role: 'model', parts: [{ text: 'Entendido! Analisei todos os dados do seu portfólio e conheço sua estratégia. Estou pronto para ajudar com sugestões personalizadas. 🚀' }] }
                 );
             }
-            this.chatSessions[sessionId] = this._model.startChat({ history });
+            // For Gemini, system instruction is set on the model, not the session
+            // We re-create the model with strategy context for this session
+            const { GoogleGenerativeAI } = require('@google/generative-ai');
+            const genAI = new GoogleGenerativeAI(this._apiKey);
+            const sessionModel = genAI.getGenerativeModel({
+                model: 'gemini-2.0-flash',
+                systemInstruction: this._buildSystemPrompt(strategyText)
+            });
+            this.chatSessions[sessionId] = sessionModel.startChat({ history });
         }
 
         const chat = this.chatSessions[sessionId];
@@ -172,15 +196,29 @@ class AIService {
         return response.response.text();
     }
 
+    async _geminiInferStrategy(context) {
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(this._apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const prompt = `Com base nos dados de portfólio abaixo, infira em 3-5 frases qual é a estratégia de investimento atual deste investidor. Seja específico, use os dados reais (ativos, metas, proventos). Escreva na terceira pessoa de forma objetiva, como uma memória estratégica para um assistente de IA. Não inclua disclaimers. Responda APENAS com o texto da estratégia, sem títulos.\n\n${context}`;
+        const response = await model.generateContent(prompt);
+        return response.response.text().trim();
+    }
+
     // ==========================================
     // OPENAI (ChatGPT)
     // ==========================================
-    async _openaiAnalyze(context) {
-        const prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
+    async _openaiAnalyze(context, strategyText = '', analysisType = 'geral') {
+        let prompt = '';
+        if (analysisType === 'ativos_vs_metas') {
+            prompt = `Analise a relação entre os Ativos do portfólio e as Metas do investidor.\n\n${context}\n\nForneça uma análise concisa focada exclusivamente em:\n1. Alinhamento da carteira com as metas.\n2. Ajustes recomendados para acelerar a conquista.\nSeja direto e prático, sem análises longas genéricas.`;
+        } else {
+            prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
+        }
         const response = await this._model.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
-                { role: 'system', content: this._getSystemWithName() },
+                { role: 'system', content: this._buildSystemPrompt(strategyText) },
                 { role: 'user', content: prompt }
             ],
             temperature: 0.7,
@@ -189,14 +227,14 @@ class AIService {
         return response.choices[0].message.content;
     }
 
-    async _openaiChat(sessionId, message, portfolioData = null) {
+    async _openaiChat(sessionId, message, portfolioData = null, strategyText = '') {
         if (!this.chatSessions[sessionId]) {
             const context = portfolioData ? this._buildPortfolioContext(portfolioData) : '';
-            const history = [{ role: 'system', content: this._getSystemWithName() }];
+            const history = [{ role: 'system', content: this._buildSystemPrompt(strategyText) }];
             if (context) {
                 history.push(
                     { role: 'user', content: `Aqui estão os dados do meu portfólio para contexto:\n\n${context}\n\nPor favor, leve esses dados em consideração em todas as respostas.` },
-                    { role: 'assistant', content: 'Entendido! Analisei todos os dados do seu portfólio. Estou pronto para responder suas dúvidas e fornecer sugestões personalizadas. Como posso ajudar? 🚀' }
+                    { role: 'assistant', content: 'Entendido! Analisei todos os dados do seu portfólio e conheço sua estratégia. Estou pronto para ajudar. 🚀' }
                 );
             }
             this.chatSessions[sessionId] = history;
@@ -216,28 +254,46 @@ class AIService {
         return reply;
     }
 
+    async _openaiInferStrategy(context) {
+        const response = await this._model.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: 'Você é um analista financeiro que sintetiza estratégias de investimento de forma objetiva.' },
+                { role: 'user', content: `Com base nos dados de portfólio abaixo, infira em 3-5 frases qual é a estratégia de investimento atual deste investidor. Seja específico, use os dados reais. Escreva na terceira pessoa de forma objetiva, como uma memória estratégica para um assistente de IA. Não inclua disclaimers. Responda APENAS com o texto da estratégia.\n\n${context}` }
+            ],
+            temperature: 0.5,
+            max_tokens: 512
+        });
+        return response.choices[0].message.content.trim();
+    }
+
     // ==========================================
     // ANTHROPIC (Claude)
     // ==========================================
-    async _anthropicAnalyze(context) {
-        const prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
+    async _anthropicAnalyze(context, strategyText = '', analysisType = 'geral') {
+        let prompt = '';
+        if (analysisType === 'ativos_vs_metas') {
+            prompt = `Analise a relação entre os Ativos do portfólio e as Metas do investidor.\n\n${context}\n\nForneça uma análise concisa focada exclusivamente em:\n1. Alinhamento da carteira com as metas.\n2. Ajustes recomendados para acelerar a conquista.\nSeja direto e prático, sem análises longas genéricas.`;
+        } else {
+            prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
+        }
         const response = await this._model.messages.create({
             model: 'claude-3-5-sonnet-latest',
             max_tokens: 4096,
-            system: this._getSystemWithName(),
+            system: this._buildSystemPrompt(strategyText),
             messages: [{ role: 'user', content: prompt }]
         });
         return response.content[0].text;
     }
 
-    async _anthropicChat(sessionId, message, portfolioData = null) {
+    async _anthropicChat(sessionId, message, portfolioData = null, strategyText = '') {
         if (!this.chatSessions[sessionId]) {
             const context = portfolioData ? this._buildPortfolioContext(portfolioData) : '';
             const history = [];
             if (context) {
                 history.push(
                     { role: 'user', content: `Aqui estão os dados do meu portfólio para contexto:\n\n${context}\n\nPor favor, leve esses dados em consideração em todas as respostas.` },
-                    { role: 'assistant', content: 'Entendido! Analisei todos os dados do seu portfólio. Estou pronto para responder suas dúvidas e fornecer sugestões personalizadas. Como posso ajudar? 🚀' }
+                    { role: 'assistant', content: 'Entendido! Analisei todos os dados do seu portfólio e conheço sua estratégia. Estou pronto para ajudar. 🚀' }
                 );
             }
             this.chatSessions[sessionId] = history;
@@ -248,7 +304,7 @@ class AIService {
         const response = await this._model.messages.create({
             model: 'claude-3-5-sonnet-latest',
             max_tokens: 4096,
-            system: this._getSystemWithName(),
+            system: this._buildSystemPrompt(strategyText),
             messages: this.chatSessions[sessionId]
         });
 
@@ -257,10 +313,20 @@ class AIService {
         return reply;
     }
 
+    async _anthropicInferStrategy(context) {
+        const response = await this._model.messages.create({
+            model: 'claude-3-5-sonnet-latest',
+            max_tokens: 512,
+            system: 'Você é um analista financeiro que sintetiza estratégias de investimento de forma objetiva.',
+            messages: [{ role: 'user', content: `Com base nos dados de portfólio abaixo, infira em 3-5 frases qual é a estratégia de investimento atual deste investidor. Seja específico, use os dados reais. Escreva na terceira pessoa de forma objetiva. Não inclua disclaimers. Responda APENAS com o texto da estratégia.\n\n${context}` }]
+        });
+        return response.content[0].text.trim();
+    }
+
     // ==========================================
     // PUBLIC API
     // ==========================================
-    async analyzePortfolio(portfolioData) {
+    async analyzePortfolio(portfolioData, strategyText = '') {
         if (!this.isConfigured()) {
             return { error: 'API key not configured. Acesse as Configurações (⚙️) para configurar.' };
         }
@@ -269,12 +335,14 @@ class AIService {
 
         try {
             let text;
+            const analysisType = portfolioData.analysisType || 'geral';
+            
             if (this._provider === 'gemini') {
-                text = await this._geminiAnalyze(context);
+                text = await this._geminiAnalyze(context, strategyText, analysisType);
             } else if (this._provider === 'openai') {
-                text = await this._openaiAnalyze(context);
+                text = await this._openaiAnalyze(context, strategyText, analysisType);
             } else if (this._provider === 'anthropic') {
-                text = await this._anthropicAnalyze(context);
+                text = await this._anthropicAnalyze(context, strategyText, analysisType);
             } else {
                 return { error: `Provedor '${this._provider}' não suportado.` };
             }
@@ -288,7 +356,7 @@ class AIService {
         }
     }
 
-    async chat(sessionId, message, portfolioData = null) {
+    async chat(sessionId, message, portfolioData = null, strategyText = '') {
         if (!this.isConfigured()) {
             return { error: 'API key not configured. Acesse as Configurações (⚙️) para configurar.' };
         }
@@ -296,11 +364,11 @@ class AIService {
         try {
             let text;
             if (this._provider === 'gemini') {
-                text = await this._geminiChat(sessionId, message, portfolioData);
+                text = await this._geminiChat(sessionId, message, portfolioData, strategyText);
             } else if (this._provider === 'openai') {
-                text = await this._openaiChat(sessionId, message, portfolioData);
+                text = await this._openaiChat(sessionId, message, portfolioData, strategyText);
             } else if (this._provider === 'anthropic') {
-                text = await this._anthropicChat(sessionId, message, portfolioData);
+                text = await this._anthropicChat(sessionId, message, portfolioData, strategyText);
             } else {
                 return { error: `Provedor '${this._provider}' não suportado.` };
             }
@@ -309,6 +377,36 @@ class AIService {
             const err = String(e);
             if (err.includes('429') || err.includes('Quota') || err.toLowerCase().includes('rate')) {
                 return { error: 'Aguarde um minuto! O limite da API pediu uma pausa rápida.' };
+            }
+            return { error: err };
+        }
+    }
+
+    /**
+     * Infer the user's investment strategy using the AI.
+     * Called only when the portfolio hash changes.
+     */
+    async inferStrategy(portfolioData, strategyText = '') {
+        if (!this.isConfigured()) {
+            return { error: 'API não configurada.' };
+        }
+        const context = this._buildPortfolioContext(portfolioData);
+        try {
+            let text;
+            if (this._provider === 'gemini') {
+                text = await this._geminiInferStrategy(context);
+            } else if (this._provider === 'openai') {
+                text = await this._openaiInferStrategy(context);
+            } else if (this._provider === 'anthropic') {
+                text = await this._anthropicInferStrategy(context);
+            } else {
+                return { error: `Provedor '${this._provider}' não suportado.` };
+            }
+            return { strategy: text };
+        } catch (e) {
+            const err = String(e);
+            if (err.includes('429') || err.includes('Quota') || err.toLowerCase().includes('rate')) {
+                return { error: 'Rate limit atingido ao inferir estratégia.' };
             }
             return { error: err };
         }

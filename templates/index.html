@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InvestAI - Dashboard Escuro</title>
+    <title>V S & A — Visão, Solidez & Autonomia</title>
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -100,21 +100,21 @@
         <header class="top-nav">
             <div class="nav-left">
                 <div class="logo">
-                    <div class="logo-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2L2 22H22L12 2Z" fill="var(--primary-color)" />
-                            <path d="M12 9L7 19H17L12 9Z" fill="#fff" />
-                        </svg>
+                    <div class="logo-icon vsa-logo-icon">
+                        <img src="{{ url_for('static', filename='icone.png') }}" alt="V S & A" class="vsa-icon-img" />
                     </div>
-                    <h2>InvestAI</h2>
+                    <div class="vsa-brand">
+                        <h2 class="vsa-title"><strong>V</strong> <span class="vsa-amp">&amp;</span> <strong>S</strong> <span class="vsa-amp">&amp;</span> <strong>A</strong></h2>
+                        <span class="vsa-subtitle"><strong>V</strong>isão, <strong>S</strong>olidez <span class="vsa-amp-sub">&</span> <strong>A</strong>utonomia</span>
+                    </div>
                 </div>
                 <nav class="main-menu">
-                    <button class="nav-item active" data-target="visao-geral">Resumo</button>
-                    <button class="nav-item" data-target="proventos">Proventos</button>
-                    <button class="nav-item" data-target="patrimonio">Patrimônio</button>
-                    <button class="nav-item" data-target="rentabilidade">Rentabilidade</button>
-                    <button class="nav-item" data-target="metas">Metas</button>
-                    <button class="nav-item" data-target="analise">Análise</button>
+                    <button class="nav-item active" data-target="visao-geral">📊 Resumo</button>
+                    <button class="nav-item" data-target="proventos">💰 Proventos</button>
+                    <button class="nav-item" data-target="patrimonio">🏦 Patrimônio</button>
+                    <button class="nav-item" data-target="rentabilidade">📈 Rentabilidade</button>
+                    <button class="nav-item" data-target="metas">🎯 Metas</button>
+                    <button class="nav-item" data-target="analise">🤖 Análise</button>
                 </nav>
             </div>
 
@@ -406,6 +406,7 @@
                                             <th>Tipo de pagamento</th>
                                             <th>Data Com</th>
                                             <th>Data Pagamento</th>
+                                            <th>Próx. Pagto</th>
                                             <th>Quantidade</th>
                                             <th>Valor do div.</th>
                                             <th>Valor total</th>
@@ -413,7 +414,7 @@
                                     </thead>
                                     <tbody id="prov-list-tbody">
                                         <!-- JS populates logic here -->
-                                        <tr><td colspan="9" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>
+                                        <tr><td colspan="10" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -535,7 +536,12 @@
             <section id="metas" class="screen">
                 <!-- Metas em andamento -->
                 <div class="metas-header-main">
-                    <h2 class="metas-section-title">Metas em andamento</h2>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <h2 class="metas-section-title" style="margin-bottom: 0;">Metas em andamento</h2>
+                        <select class="select-sm" id="metas-year-selector" style="font-size: 0.95rem; padding: 4px 24px 4px 10px; background-color: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; cursor: pointer;">
+                            <option value="2026">2026</option>
+                        </select>
+                    </div>
                     <button class="btn-outline btn-sm" id="btn-create-meta">+ Criar nova meta</button>
                 </div>
                 <div class="dashboard-grid" id="metas-em-andamento">

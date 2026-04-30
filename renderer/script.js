@@ -26,8 +26,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Re-renderizar gráficos para aplicar nova paleta de cor dinâmica (ex: datalabels)
             if (typeof charts !== 'undefined') {
+                const newGridColor = getChartGridColor();
                 Object.values(charts).forEach(chart => {
-                    if (chart && typeof chart.update === 'function') chart.update();
+                    if (chart && typeof chart.update === 'function') {
+                        // Atualiza cor do grid em todos os eixos Y
+                        if (chart.options && chart.options.scales && chart.options.scales.y) {
+                            if (chart.options.scales.y.grid) {
+                                chart.options.scales.y.grid.color = newGridColor;
+                            }
+                        }
+                        chart.update();
+                    }
                 });
             }
         });
@@ -84,6 +93,14 @@ document.addEventListener('DOMContentLoaded', () => {
         initCharts();
     }
 
+
+    // Helper: returns grid line color adjusted for current theme
+    function getChartGridColor() {
+        return document.body.classList.contains('light-mode')
+            ? 'rgba(100, 116, 139, 0.15)'
+            : 'rgba(100, 116, 139, 0.2)';
+    }
+
     function initCharts() {
         const ctxEvolution = document.getElementById('evolutionBarChart');
         if (ctxEvolution) {
@@ -124,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         x: { grid: { display: false } },
                         y: {
                             grace: '20%',
-                            grid: { borderDash: [4, 4], color: '#2D3748' },
+                            grid: { borderDash: [4, 4], color: getChartGridColor() },
                             ticks: { callback: function (value) { return value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }); } }
                         }
                     }
@@ -227,7 +244,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const globalYearFilter = document.getElementById('global-year-filter');
+    if (globalYearFilter) {
+        globalYearFilter.addEventListener('change', async (e) => {
+            window.globalYear = e.target.value;
+            await renderDashboards();
+        });
+    }
+
     async function renderDashboards(forceRefresh = false) {
+        if (!window.globalYear) {
+            window.globalYear = new Date().getFullYear().toString();
+        }
+
         const rows = window.b3Data;
         if (!rows || rows.length < 2) return;
 
@@ -261,7 +290,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let monthlyInvestments = {}; // To track history for chart
         let monthlyYields = {};
         let yieldTransactions = []; // Novo tracking de rendimentos
-    let investTransactions = []; // Tracking de compras/vendas para TWR
+        let investTransactions = []; // Tracking de compras/vendas para TWR
+        let allYearsSet = new Set(); // Para popular o filtro global de anos
 
         for (let i = headerIndex + 1; i < rows.length; i++) {
             const row = rows[i];
@@ -300,6 +330,15 @@ document.addEventListener('DOMContentLoaded', () => {
             let shortName = produtoStr.split(" - ")[0];
             if (shortName.length > 15) shortName = shortName.substring(0, 15);
 
+            let dateParts = [];
+            let rowDate = row[colData] ? String(row[colData]) : "";
+            if (rowDate.includes('/')) dateParts = rowDate.split("/");
+            let transYear = dateParts.length === 3 ? dateParts[2] : null;
+
+            if (transYear) {
+                allYearsSet.add(transYear);
+            }
+
             const mUpper = movimentacao.toUpperCase();
             const isCompra = mUpper.includes("COMPRA") || mUpper.includes("APLICAÇÃO") || mUpper.includes("SUBSCRIÇÃO") || mUpper.includes("TRANSFERÊNCIA - LIQUIDAÇÃO");
             const isVenda = mUpper.includes("VENDA") || mUpper.includes("RESGATE");
@@ -307,6 +346,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
             if (isCompra || isVenda) {
+                // Filtro Global de Ano para Patrimônio
+                if (window.globalYear !== 'Todos' && transYear && transYear > window.globalYear) {
+                    continue; // Ignora compras/vendas que ocorreram DEPOIS do ano selecionado
+                }
+
                 const signal = isCompra ? 1 : -1;
                 const netValue = valorNum * signal;
                 const netQuant = quantNum * signal;
@@ -320,25 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 categories[classe].ativos[shortName].quant += netQuant;
                 categories[classe].ativos[shortName].totalVal += netValue;
 
-                // Track for Evolution Chart
-                let dateParts = [];
-                if (row[colData]) {
-                    const strD = String(row[colData]);
-                    if (strD.includes('/')) dateParts = strD.split("/");
-                }
-
+                // Track individual transactions for TWR
                 if (dateParts.length === 3) {
                     const monthYear = `${dateParts[1]}/${dateParts[2].slice(-2)}`; // MM/YY
                     const sortKey = `${dateParts[2]}${dateParts[1]}`; // YYYYMM
-                    if (!monthlyInvestments[sortKey]) {
-                        monthlyInvestments[sortKey] = { label: monthYear, total: 0 };
-                    }
-                    if (!monthlyInvestments[sortKey][classe]) monthlyInvestments[sortKey][classe] = 0;
-                    
-                    monthlyInvestments[sortKey].total += netValue;
-                    monthlyInvestments[sortKey][classe] += netValue;
 
-                    // Track individual transactions for TWR
                     investTransactions.push({
                         dateStr: String(row[colData]),
                         sortDate: `${dateParts[2]}${dateParts[1]}${dateParts[0]}`,
@@ -349,13 +379,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         value: netValue,
                         type: isCompra ? 'buy' : 'sell'
                     });
+
+                    // Evolution Chart (Só mostra meses do ano selecionado, a menos que seja "Todos")
+                    if (window.globalYear === 'Todos' || transYear === window.globalYear) {
+                        if (!monthlyInvestments[sortKey]) {
+                            monthlyInvestments[sortKey] = { label: monthYear, total: 0 };
+                        }
+                        if (!monthlyInvestments[sortKey][classe]) monthlyInvestments[sortKey][classe] = 0;
+                        
+                        monthlyInvestments[sortKey].total += netValue;
+                        monthlyInvestments[sortKey][classe] += netValue;
+                    }
                 }
 
             } else if (isRend) {
+                // Filtro Global de Ano para Proventos
+                if (window.globalYear !== 'Todos' && transYear && transYear !== window.globalYear) {
+                    continue; // Ignora proventos que não sejam DO ANO selecionado
+                }
+
                 proventosTotais += valorNum;
-                let dateParts = [];
-                let paymentDate = row[colData] ? String(row[colData]) : "";
-                if (paymentDate.includes('/')) dateParts = paymentDate.split("/");
                 
                 if (dateParts.length === 3) {
                     monthsSet.add(dateParts[1] + "-" + dateParts[2]);
@@ -371,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Salva histórico de todas as transações de proventos
                     yieldTransactions.push({
-                        dateStr: paymentDate,         // ex: 15/03/2026
+                        dateStr: rowDate,             // ex: 15/03/2026
                         sortDate: `${dateParts[2]}${dateParts[1]}${dateParts[0]}`, // 20260315
                         monthKey: sortKey,            // 202603
                         yearKey: dateParts[2],        // 2026
@@ -382,6 +425,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         quant: quantNum,              // 100
                         valTotal: valorNum            // 80.00
                     });
+                }
+            }
+        }
+
+        // Popula seletor global de ano
+        const globalYearFilter = document.getElementById('global-year-filter');
+        if (globalYearFilter && allYearsSet.size > 0) {
+            // Apenas repopula se as opções estiverem vazias ou diferentes, para evitar flicker
+            const sortedYears = Array.from(allYearsSet).sort((a, b) => b.localeCompare(a));
+            const shouldRepopulate = globalYearFilter.options.length <= 1; // tem vazio ou só todos
+            
+            if (shouldRepopulate) {
+                globalYearFilter.innerHTML = '<option value="Todos">Todos os Anos</option>';
+                sortedYears.forEach(y => {
+                    const opt = document.createElement('option');
+                    opt.value = y;
+                    opt.textContent = `Ano: ${y}`;
+                    globalYearFilter.appendChild(opt);
+                });
+                
+                // Set default to window.globalYear if exists in options
+                if (sortedYears.includes(window.globalYear)) {
+                    globalYearFilter.value = window.globalYear;
+                } else {
+                    globalYearFilter.value = "Todos";
+                    window.globalYear = "Todos";
                 }
             }
         }
@@ -516,25 +585,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (provTypeFilter) {
             updateSelectOptions(provTypeFilter, activeCategories);
         }
-
-        const provYearFilter = document.getElementById('prov-filter-ano');
-        if (provYearFilter) {
-            const { yieldTransactions } = window.dashboardState;
-            const years = [...new Set(yieldTransactions.map(t => t.yearKey))].sort((a, b) => b.localeCompare(a));
-            const currentYearVal = provYearFilter.value;
-            provYearFilter.innerHTML = '<option value="Todos">Ano: Todos</option>';
-            years.forEach(y => {
-                const opt = document.createElement('option');
-                opt.value = y;
-                opt.textContent = `Ano: ${y}`;
-                provYearFilter.appendChild(opt);
-            });
-            if (years.includes(currentYearVal) || currentYearVal === "Todos") {
-                provYearFilter.value = currentYearVal;
-            } else {
-                provYearFilter.value = "Todos";
-            }
-        }
     }
 
     function updateFilteredCharts() {
@@ -645,12 +695,6 @@ document.addEventListener('DOMContentLoaded', () => {
             window.proventoFilters.selectedType = e.target.value;
             renderProventosScreen();
         });
-
-        document.getElementById('prov-filter-ano')?.addEventListener('change', (e) => {
-            window.proventoFilters.selectedYear = e.target.value;
-            renderProventosScreen();
-        });
-
         const btnMensal = document.getElementById('prov-btn-mensal');
         const btnAnual = document.getElementById('prov-btn-anual');
 
@@ -786,7 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td>
                             <div class="asset-table-ticker">
                                 <div class="asset-table-icon">🏢</div>
-                                <span style="font-weight: 600;">${ticker}</span>
+                                <span class="raiox-ticker-link" onclick="event.stopPropagation(); window.openRaioXModal('${ticker}')">${ticker}</span>
                             </div>
                         </td>
                         <td>${ativo.quant.toLocaleString('pt-BR')}</td>
@@ -812,17 +856,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderProventosScreen() {
         if (!window.dashboardState) return;
         const { yieldTransactions, proventosTotais } = window.dashboardState;
-        const filters = window.proventoFilters || { viewType: 'Mensal', selectedYear: 'Todos', selectedType: 'Todos' };
+        const filters = window.proventoFilters || { viewType: 'Mensal', selectedType: 'Todos' };
         
         // 1. Filtragem Inicial
         let txs = [...yieldTransactions];
         if (filters.selectedType !== 'Todos') {
             txs = txs.filter(t => t.assetClass === filters.selectedType);
         }
-        if (filters.selectedYear !== 'Todos') {
-            txs = txs.filter(t => t.yearKey === filters.selectedYear);
-        }
-
         // Ordena histórico em ordem decrescente (mais recente primeiro)
         txs.sort((a, b) => b.sortDate.localeCompare(a.sortDate));
         
@@ -933,7 +973,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     options: { 
                         responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { display: false }, datalabels: { display: true, anchor: 'end', align: 'top', color: '#E2E8F0', formatter: (val) => val > 0 ? val.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}) : '' } },
-                        scales: { x: { grid: { display: false } }, y: { grace: '15%', grid: { borderDash: [4,4], color: '#2D3748' }, ticks: { callback: v => v.toLocaleString('pt-BR') } } }
+                        scales: { x: { grid: { display: false } }, y: { grace: '15%', grid: { borderDash: [4,4], color: getChartGridColor() }, ticks: { callback: v => v.toLocaleString('pt-BR') } } }
                     }
                 });
             }
@@ -978,17 +1018,26 @@ document.addEventListener('DOMContentLoaded', () => {
             listTbody.innerHTML = '';
             let lTotal = 0;
             if (txs.length > 0) {
-                // Monta tabela pegando todos (opcionalmente adicionar paginação depois se for gigante)
+                // Collect unique FII tickers for next-dividend lookup
+                const fiiiTickers = [...new Set(
+                    txs
+                        .filter(t => t.assetClass === 'FIIs' || (t.ticker && /^[A-Z]{4}11$/i.test(t.ticker)))
+                        .map(t => t.ticker.replace(/\.SA$/i, '').toUpperCase())
+                )];
+
+                // Monta tabela inicialmente com "..." na coluna Próx. Pagto para FIIs
                 txs.forEach(t => {
                     lTotal += t.valTotal;
                     let divValStr = t.quant > 0 ? (t.valTotal / t.quant).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '-';
                     let qStr = t.quant > 0 ? t.quant.toLocaleString('pt-BR') : '-';
-                    
+                    const cleanTicker = t.ticker.replace(/\.SA$/i, '').toUpperCase();
+                    const isFii = t.assetClass === 'FIIs' || /^[A-Z]{4}11$/i.test(t.ticker);
+
                     listTbody.innerHTML += `<tr>
                         <td>
                             <div class="asset-table-ticker">
                                 <div class="asset-table-icon" style="width:24px; height:24px; font-size:12px;">📊</div>
-                                <span style="font-weight: 600;">${t.ticker}</span>
+                                <span class="raiox-ticker-link" onclick="window.openRaioXModal('${t.ticker}')">${t.ticker}</span>
                             </div>
                         </td>
                         <td><span class="div-type-badge">${t.assetClass || '-'}</span></td>
@@ -996,15 +1045,46 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td style="color:var(--text-secondary)">${t.type}</td>
                         <td style="color:var(--text-tertiary);">-</td>
                         <td style="color:var(--text-primary);">${t.dateStr}</td>
+                        <td class="next-pagto-cell" data-ticker="${cleanTicker}" style="color:var(--text-tertiary); font-size:0.85rem;">${isFii ? '<span class="next-pagto-loading">...</span>' : '—'}</td>
                         <td>${qStr}</td>
                         <td>${divValStr}</td>
                         <td style="font-weight:600; color:var(--text-primary)">${t.valTotal.toLocaleString('pt-BR', {style:'currency',currency:'BRL'})}</td>
                     </tr>`;
                 });
+
+                document.getElementById('prov-list-total').textContent = lTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                // Busca assíncrona das datas — não bloqueia a UI
+                if (fiiiTickers.length > 0 && window.api && window.api.getNextDividends) {
+                    window.api.getNextDividends(fiiiTickers)
+                        .then(nextDates => {
+                            // Preenche as células de Próx. Pagto com os dados recebidos
+                            const cells = listTbody.querySelectorAll('.next-pagto-cell');
+                            cells.forEach(cell => {
+                                const ticker = cell.dataset.ticker;
+                                if (!ticker) return;
+                                const dateVal = nextDates[ticker];
+                                if (dateVal) {
+                                    cell.innerHTML = `<span
+                                        style="font-weight:500; color:var(--text-primary);"
+                                        title="Data prevista com base em informações públicas do fundo"
+                                    >${dateVal}</span>`;
+                                } else {
+                                    cell.innerHTML = '<span style="color:var(--text-tertiary);">—</span>';
+                                }
+                            });
+                        })
+                        .catch(() => {
+                            // Em falha total, substitui "..." por "—"
+                            const cells = listTbody.querySelectorAll('.next-pagto-loading');
+                            cells.forEach(el => { el.textContent = '—'; });
+                        });
+                }
+
             } else {
-                listTbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>`;
+                listTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>`;
+                document.getElementById('prov-list-total').textContent = lTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             }
-            document.getElementById('prov-list-total').textContent = lTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
     }
 
@@ -1060,6 +1140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderRentabChart(monthlyReturns, rentabIndicesCache);
         renderRentabKPIs(monthlyReturns, rentabIndicesCache);
         renderRentabTable(monthlyReturns);
+        renderRentabIndividual(investTransactions, rentabMonthlyPricesCache, categories);
     }
 
     function generateMonthRange(startKey, endKey) {
@@ -1259,7 +1340,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             ticks: { color: '#64748B', font: { size: 11 } }
                         },
                         y: {
-                            grid: { borderDash: [4, 4], color: '#2D3748' },
+                            grid: { borderDash: [4, 4], color: getChartGridColor() },
                             ticks: {
                                 color: '#64748B',
                                 callback: v => v.toFixed(2)
@@ -1390,6 +1471,227 @@ document.addEventListener('DOMContentLoaded', () => {
             tr += `<td class="rentab-acum-cell">${cumRet.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>`;
             tbody.innerHTML += `<tr>${tr}</tr>`;
         });
+    }
+
+    function renderRentabIndividual(investTxs, monthlyPrices, categories) {
+        const container = document.getElementById('rentab-indiv-list-container');
+        if (!container) return;
+
+        // Get all unique tickers from transactions
+        const txTickers = new Set(investTxs.map(t => t.ticker));
+        
+        // Find class and icon for each ticker
+        const classIcons = { "FIIs": "🏢", "Ações": "💲", "ETFs": "📈", "Tesouro Direto": "🏫" };
+        const tickerInfo = {};
+        for (const [className, cat] of Object.entries(categories)) {
+            for (const ticker of Object.keys(cat.ativos)) {
+                if (txTickers.has(ticker)) {
+                    tickerInfo[ticker] = {
+                        className: className,
+                        icon: classIcons[className] || '📊',
+                        currentValue: cat.ativos[ticker].totalVal || 0,
+                        investedVal: cat.ativos[ticker].investedVal || 0
+                    };
+                }
+            }
+        }
+
+        // Calculate TWR per ticker
+        const individualReturns = {};
+        txTickers.forEach(ticker => {
+            const singleTickerTxs = investTxs.filter(t => t.ticker === ticker);
+            // Create dummy categories object to pass to calculateTWR so it can get currentPrice if monthlyPrices fails
+            const singleCat = {};
+            if (tickerInfo[ticker]) {
+                const cName = tickerInfo[ticker].className;
+                singleCat[cName] = { ativos: {} };
+                singleCat[cName].ativos[ticker] = categories[cName].ativos[ticker];
+            }
+            const returns = calculateTWR(singleTickerTxs, monthlyPrices, singleCat);
+            
+            // Calc total cumulative return for this ticker
+            let product = 1;
+            Object.values(returns).forEach(r => product *= (1 + r/100));
+            const totalRet = (product - 1) * 100;
+
+            individualReturns[ticker] = {
+                monthly: returns,
+                totalReturn: totalRet,
+                info: tickerInfo[ticker] || { className: 'Outros', icon: '📊', currentValue: 0, investedVal: 0 }
+            };
+        });
+
+        // Store for filtering
+        if (!window.rentabState) window.rentabState = {};
+        window.rentabState.individual = individualReturns;
+
+        function updateAssetFilterOptions() {
+            const classFilterVal = document.getElementById('rentab-indiv-class-filter')?.value || 'Todos';
+            const assetFilter = document.getElementById('rentab-indiv-asset-filter');
+            if (!assetFilter) return;
+
+            let tickersArr = Object.keys(individualReturns);
+            if (classFilterVal !== 'Todos') {
+                tickersArr = tickersArr.filter(t => individualReturns[t].info.className === classFilterVal);
+            }
+            tickersArr.sort();
+
+            const currentSelected = assetFilter.value;
+            assetFilter.innerHTML = '<option value="Todos">Todos os ativos</option>';
+            tickersArr.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                assetFilter.appendChild(opt);
+            });
+            if (tickersArr.includes(currentSelected)) {
+                assetFilter.value = currentSelected;
+            } else {
+                assetFilter.value = 'Todos';
+            }
+        }
+
+        // Render list function (can be called by filter)
+        function updateIndividualList() {
+            const classFilterVal = document.getElementById('rentab-indiv-class-filter')?.value || 'Todos';
+            const assetFilterVal = document.getElementById('rentab-indiv-asset-filter')?.value || 'Todos';
+            
+            let tickersArr = Object.keys(individualReturns);
+            if (classFilterVal !== 'Todos') {
+                tickersArr = tickersArr.filter(t => individualReturns[t].info.className === classFilterVal);
+            }
+            if (assetFilterVal !== 'Todos') {
+                tickersArr = tickersArr.filter(t => t === assetFilterVal);
+            }
+
+            // Sort by total return DESC
+            tickersArr.sort((a, b) => individualReturns[b].totalReturn - individualReturns[a].totalReturn);
+
+            container.innerHTML = '';
+            
+            if (tickersArr.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:var(--text-tertiary); padding: 20px;">Nenhum ativo encontrado para este filtro.</div>';
+                return;
+            }
+
+            const template = document.getElementById('template-rentab-indiv');
+            if (!template) return;
+            
+            tickersArr.forEach(ticker => {
+                const data = individualReturns[ticker];
+                const clone = template.content.cloneNode(true);
+                
+                const groupDiv = clone.querySelector('.asset-group');
+                const tickerEl = clone.querySelector('.rentab-indiv-ticker');
+                tickerEl.textContent = ticker;
+                tickerEl.classList.add('raiox-ticker-link');
+                tickerEl.addEventListener('click', (e) => { e.stopPropagation(); window.openRaioXModal(ticker); });
+                clone.querySelector('.rentab-indiv-class').textContent = data.info.className;
+                clone.querySelector('.rentab-indiv-icon').textContent = data.info.icon;
+                
+                // Formatação
+                clone.querySelector('.rentab-indiv-posicao').textContent = data.info.currentValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                
+                const retLabel = clone.querySelector('.rentab-indiv-total-pct');
+                retLabel.textContent = data.totalReturn.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+                retLabel.classList.add(data.totalReturn >= 0 ? 'positive' : 'negative');
+
+                // Accordion behavior
+                const header = clone.querySelector('.asset-group-header');
+                header.addEventListener('click', () => {
+                    const isExpanded = groupDiv.classList.contains('expanded');
+                    const content = groupDiv.querySelector('.asset-group-content');
+                    if (!isExpanded) {
+                        groupDiv.classList.add('expanded');
+                        if (typeof gsap !== 'undefined') {
+                            gsap.fromTo(content, { height: 0, opacity: 0 }, { height: "auto", opacity: 1, duration: 0.4, ease: "power3.out" });
+                        }
+                    } else {
+                        if (typeof gsap !== 'undefined') {
+                            gsap.to(content, { height: 0, opacity: 0, duration: 0.3, ease: "power3.in", onComplete: () => {
+                                groupDiv.classList.remove('expanded');
+                                gsap.set(content, { clearProps: "all" });
+                            }});
+                        } else {
+                            groupDiv.classList.remove('expanded');
+                        }
+                    }
+                });
+
+                // Populate monthly table for this ticker
+                const tbody = clone.querySelector('.rentab-indiv-tbody');
+                const returns = data.monthly;
+                const sortedMonths = Object.keys(returns).sort();
+                
+                if (sortedMonths.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;">Nenhum dado</td></tr>`;
+                } else {
+                    const byYear = {};
+                    sortedMonths.forEach(m => {
+                        const [year, month] = m.split('-');
+                        if (!byYear[year]) byYear[year] = {};
+                        byYear[year][parseInt(month)] = returns[m];
+                    });
+                    
+                    const years = Object.keys(byYear).sort((a,b)=>b.localeCompare(a));
+                    let cumulativeProduct = 1;
+                    const cumByYear = {};
+                    
+                    const chronoYears = [...years].reverse();
+                    chronoYears.forEach(year => {
+                        let yearProduct = 1;
+                        for (let m=1; m<=12; m++) {
+                            if (byYear[year][m] !== undefined) {
+                                yearProduct *= (1 + byYear[year][m]/100);
+                                cumulativeProduct *= (1 + byYear[year][m]/100);
+                            }
+                        }
+                        cumByYear[year] = { yearRet: (yearProduct-1)*100, cumRet: (cumulativeProduct-1)*100 };
+                    });
+
+                    years.forEach(year => {
+                        let tr = `<td>${year}</td>`;
+                        for(let m=1; m<=12; m++){
+                            const val = byYear[year][m];
+                            if(val !== undefined) {
+                                const cls = val > 0.001 ? 'rentab-positive' : (val < -0.001 ? 'rentab-negative' : 'rentab-zero');
+                                tr += `<td class="${cls}">${val.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}%</td>`;
+                            } else {
+                                tr += `<td class="rentab-zero">-</td>`;
+                            }
+                        }
+                        const yRet = cumByYear[year].yearRet;
+                        const cRet = cumByYear[year].cumRet;
+                        const yrCls = yRet > 0.001 ? 'rentab-positive' : (yRet < -0.001 ? 'rentab-negative' : 'rentab-zero');
+                        tr += `<td class="rentab-acum-cell ${yrCls}">${yRet.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})}%</td>`;
+                        const crCls = cRet > 0.001 ? 'rentab-positive' : (cRet < -0.001 ? 'rentab-negative' : 'rentab-zero');
+                        tr += `<td class="rentab-acum-cell ${crCls}">${cRet.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})}%</td>`;
+                        tbody.innerHTML += `<tr>${tr}</tr>`;
+                    });
+                }
+
+                container.appendChild(clone);
+            });
+        }
+
+        // Init list and bind filter
+        updateAssetFilterOptions();
+        updateIndividualList();
+        
+        const classFilterSelect = document.getElementById('rentab-indiv-class-filter');
+        if (classFilterSelect && !classFilterSelect.dataset.listenerAttached) {
+            classFilterSelect.addEventListener('change', () => {
+                updateAssetFilterOptions();
+                updateIndividualList();
+            });
+            classFilterSelect.dataset.listenerAttached = 'true';
+        }
+
+        const assetFilterSelect = document.getElementById('rentab-indiv-asset-filter');
+        if (assetFilterSelect && !assetFilterSelect.dataset.listenerAttached) {
+            assetFilterSelect.addEventListener('change', updateIndividualList);
+            assetFilterSelect.dataset.listenerAttached = 'true';
+        }
     }
 
 
@@ -1599,7 +1901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     barsHTML += `
                         <div class="meta-bar-col" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; position:relative; height:120px;" title="${m.label}: ${formattedVal}">
-                            <div style="position:relative; width:80%; max-width:25px; height:100%; display:flex; align-items:flex-end; justify-content:center; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                            <div style="position:relative; width:80%; max-width:25px; height:100%; display:flex; align-items:flex-end; justify-content:center; background: var(--border-color); border-radius: 4px;">
                                 ${iconHtml}
                                 <div style="width: 100%; background-color: ${barColor}; height: ${heightPct}%; border-radius: 4px 4px 0 0; transition: height 0.3s; position:relative; z-index: 1;"></div>
                             </div>
@@ -1612,8 +1914,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressWrapperHTML = `
                     <div class="meta-bar-chart" style="display:flex; justify-content:space-between; align-items:flex-end; height:150px; margin-top:20px; position: relative;">
                         <div style="position: absolute; left: 0; right: 0; bottom: 20px; height: 120px; pointer-events: none;">
-                            <div style="position: absolute; bottom: ${targetLinePct}%; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,0.3); z-index: 0;"></div>
-                            <span style="position: absolute; bottom: ${targetLinePct}%; left: 0; font-size: 0.6rem; color: rgba(255,255,255,0.5); transform: translateY(-100%);">${formatCurrency(meta.value_target)}</span>
+                            <div style="position: absolute; bottom: ${targetLinePct}%; left: 0; right: 0; border-top: 1px dashed var(--text-tertiary); z-index: 0;"></div>
+                            <span style="position: absolute; bottom: ${targetLinePct}%; left: 0; font-size: 0.6rem; color: var(--text-tertiary); transform: translateY(-100%);">${formatCurrency(meta.value_target)}</span>
                         </div>
                         ${barsHTML}
                     </div>
@@ -1766,7 +2068,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const state = window.dashboardState || {};
                 const slimPortfolioData = {
                     categories: state.categories,
-                    performance: { proventos: state.proventosTotais }
+                    performance: { proventos: state.proventosTotais },
+                    metas: typeof currentMetas !== 'undefined' ? currentMetas : [],
+                    analysisType: 'ativos_vs_metas'
                 };
                 const data = await window.api.aiAnalyze(slimPortfolioData);
                 
@@ -1891,6 +2195,46 @@ document.addEventListener('DOMContentLoaded', () => {
             chatMessages.innerHTML = '';
             addChatMessage('bot', "Olá! Sou o **InvestAI**, seu consultor financeiro pessoal. 🚀\n\nImporte seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!");
         });
+    }
+
+    // ==========================================
+    // CHAT DRAWER - MENU LATERAL PERSISTENTE
+    // ==========================================
+    const btnToggleChat = document.getElementById('btn-toggle-chat');
+    const chatDrawer = document.getElementById('chat-drawer');
+    const chatOverlay = document.getElementById('chat-overlay');
+    const btnCloseChat = document.getElementById('btn-close-chat');
+
+    function openChatDrawer() {
+        if (!chatDrawer) return;
+        chatDrawer.classList.add('open');
+        if (chatOverlay) chatOverlay.classList.remove('hidden');
+        if (btnToggleChat) btnToggleChat.classList.add('open');
+        if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (chatInput) setTimeout(() => chatInput.focus(), 380);
+    }
+
+    function closeChatDrawer() {
+        if (!chatDrawer) return;
+        chatDrawer.classList.remove('open');
+        if (chatOverlay) chatOverlay.classList.add('hidden');
+        if (btnToggleChat) btnToggleChat.classList.remove('open');
+    }
+
+    if (btnToggleChat) {
+        btnToggleChat.addEventListener('click', () => {
+            chatDrawer && chatDrawer.classList.contains('open')
+                ? closeChatDrawer()
+                : openChatDrawer();
+        });
+    }
+
+    if (btnCloseChat) {
+        btnCloseChat.addEventListener('click', closeChatDrawer);
+    }
+
+    if (chatOverlay) {
+        chatOverlay.addEventListener('click', closeChatDrawer);
     }
 
     // ==========================================
@@ -2079,4 +2423,907 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ==========================================
+    // SIMULADOR DE APORTES
+    // ==========================================
+    let simuladorChartInstance = null;
+
+    function initSimulador() {
+        const ctx = document.getElementById('simuladorChart');
+        if (!ctx) return;
+
+        simuladorChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                            }
+                        }
+                    },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: {
+                        stacked: true,
+                        grid: { borderDash: [4, 4], color: getChartGridColor() },
+                        ticks: { callback: function(value) { return value.toLocaleString('pt-BR', { minimumFractionDigits: 0 }); } }
+                    }
+                }
+            }
+        });
+
+        // Listeners for inputs
+        const inputs = ['sim-patrimonio', 'sim-aporte', 'sim-rentabilidade', 'sim-dy', 'sim-anos'];
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', calculateSimulation);
+        });
+
+        const btnUseCurrent = document.getElementById('btn-sim-use-current');
+        if (btnUseCurrent) {
+            btnUseCurrent.addEventListener('click', () => {
+                const valText = document.getElementById('val-patrimonio').textContent;
+                const match = valText.replace(/[^\d,-]/g, '').replace(',', '.');
+                let curPat = parseFloat(match) || 0;
+                document.getElementById('sim-patrimonio').value = curPat.toFixed(2);
+                calculateSimulation();
+            });
+        }
+
+        setTimeout(calculateSimulation, 500);
+    }
+
+    function calculateSimulation() {
+        const patrimonioInicial = parseFloat(document.getElementById('sim-patrimonio')?.value) || 0;
+        const aporteMensal = parseFloat(document.getElementById('sim-aporte')?.value) || 0;
+        const rentAnualPct = parseFloat(document.getElementById('sim-rentabilidade')?.value) || 0;
+        const dyAnualPct = parseFloat(document.getElementById('sim-dy')?.value) || 0;
+        const anos = parseInt(document.getElementById('sim-anos')?.value) || 10;
+
+        const rentMensal = Math.pow(1 + (rentAnualPct / 100), 1 / 12) - 1;
+        
+        let labels = [];
+        let dataAportado = [];
+        let dataJuros = [];
+        
+        let curPatrimonio = patrimonioInicial;
+        let curAportado = patrimonioInicial;
+        let curJuros = 0;
+
+        const tbody = document.getElementById('sim-table-body');
+        if (tbody) tbody.innerHTML = '';
+
+        for (let ano = 1; ano <= anos; ano++) {
+            let jurosDoAno = 0;
+            let aporteDoAno = aporteMensal * 12;
+
+            for (let mes = 1; mes <= 12; mes++) {
+                let rendimentoMes = curPatrimonio * rentMensal;
+                jurosDoAno += rendimentoMes;
+                curJuros += rendimentoMes;
+                
+                curPatrimonio += rendimentoMes + aporteMensal;
+                curAportado += aporteMensal;
+            }
+
+            labels.push(`Ano ${ano}`);
+            dataAportado.push(curAportado);
+            dataJuros.push(curJuros);
+
+            if (tbody) {
+                const dyMensal = Math.pow(1 + (dyAnualPct / 100), 1 / 12) - 1;
+                const rendaMensalProj = curPatrimonio * dyMensal;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${ano}</td>
+                    <td class="money">${aporteDoAno.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td>${curAportado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td class="money">${jurosDoAno.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td>${curJuros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td style="font-weight: 600;">${curPatrimonio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td class="renda">${rendaMensalProj.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        const btnSimPat = document.getElementById('sim-res-patrimonio');
+        if(btnSimPat) btnSimPat.textContent = curPatrimonio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        
+        const btnSimApo = document.getElementById('sim-res-aportado');
+        if(btnSimApo) btnSimApo.textContent = curAportado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        
+        const dyMensal = Math.pow(1 + (dyAnualPct / 100), 1 / 12) - 1;
+        const rendaFinal = curPatrimonio * dyMensal;
+        
+        const btnSimRen = document.getElementById('sim-res-renda');
+        if(btnSimRen) btnSimRen.textContent = rendaFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        if (simuladorChartInstance) {
+            simuladorChartInstance.data.labels = labels;
+            simuladorChartInstance.data.datasets = [
+                {
+                    label: 'Total Aportado',
+                    data: dataAportado,
+                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    borderColor: '#3B82F6',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Juros Acumulados',
+                    data: dataJuros,
+                    backgroundColor: 'rgba(16, 185, 129, 0.5)',
+                    borderColor: '#10B981',
+                    fill: true,
+                    tension: 0.4
+                }
+            ];
+            simuladorChartInstance.update();
+        }
+    }
+
+    initSimulador();
+
+    // ==========================================
+    // CONTROLE DE IMPOSTO DE RENDA
+    // ==========================================
+
+    const IR_STORAGE_KEY = 'vsa_ir_operacoes';
+    let irOperacoes = [];
+    let irActiveClass = 'acoes';
+    let irActiveYear = new Date().getFullYear();
+
+    const IR_CLASS_LABELS = {
+        acoes: 'Ações',
+        acoes_day: 'Ações Day Trade',
+        fiis: 'FIIs',
+        etfs: 'ETFs',
+        tesouro: 'Tesouro Direto',
+        todos: 'Todos'
+    };
+
+    function irCalcAliq(classe, tempoPosse) {
+        if (classe === 'acoes_day') return 0.20;
+        if (classe === 'fiis') return 0.20;
+        if (classe === 'etfs') return 0.15;
+        if (classe === 'tesouro') {
+            const map = { curto: 0.225, medio: 0.20, longo_1: 0.175, longo_2: 0.15 };
+            return map[tempoPosse] || 0.15;
+        }
+        return 0.15; // acoes swing
+    }
+
+    function irCalcIsencao(classe, vendas) {
+        // Apenas ações swing trade têm isenção até R$20.000/mês
+        if (classe === 'acoes' && vendas <= 20000) return vendas; // isento total
+        return 0;
+    }
+
+    function irCalcOperacao(op) {
+        const vendas = op.vendas || 0;
+        const custo = op.custo || 0;
+        const pago = op.irPago || 0;
+        const ganho = vendas - custo;
+
+        // Isenção aplicável
+        const isencaoDisponivelValor = (op.classe === 'acoes' && vendas <= 20000) ? ganho : 0;
+        const isencao = ganho > 0 ? isencaoDisponivelValor : 0;
+
+        const aliq = irCalcAliq(op.classe, op.tempo);
+        const ganhoTributavel = Math.max(0, ganho - isencao);
+
+        return {
+            ganho,
+            isencao,
+            ganhoTributavel,
+            aliquota: aliq,
+            irBruto: ganhoTributavel > 0 ? ganhoTributavel * aliq : 0,
+            irDevido: Math.max(0, (ganhoTributavel > 0 ? ganhoTributavel * aliq : 0) - pago)
+        };
+    }
+
+    function irSaveStorage() {
+        localStorage.setItem(IR_STORAGE_KEY, JSON.stringify(irOperacoes));
+    }
+
+    function irLoadStorage() {
+        try {
+            const raw = localStorage.getItem(IR_STORAGE_KEY);
+            irOperacoes = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            irOperacoes = [];
+        }
+    }
+
+    function irGetFilteredOps() {
+        return irOperacoes.filter(op => {
+            const opYear = parseInt((op.mes || '').split('-')[0]);
+            const classMatch = irActiveClass === 'todos'
+                ? true
+                : (irActiveClass === 'acoes' ? (op.classe === 'acoes' || op.classe === 'acoes_day') : op.classe === irActiveClass);
+            return opYear === irActiveYear && classMatch;
+        });
+    }
+
+    function irRenderTable() {
+        const tbody = document.getElementById('ir-table-body');
+        if (!tbody) return;
+
+        const ops = irGetFilteredOps();
+
+        // Sort by month
+        ops.sort((a, b) => (a.mes || '').localeCompare(b.mes || ''));
+
+        if (ops.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; color:var(--text-tertiary); padding:40px;">
+                Nenhuma operação para esta classe/ano. Clique em <strong>+ Registrar Venda</strong>.
+            </td></tr>`;
+            irUpdateKPIs([]);
+            return;
+        }
+
+        // Group by month for loss carry-forward
+        const byMonth = {};
+        ops.forEach(op => {
+            if (!byMonth[op.mes]) byMonth[op.mes] = [];
+            byMonth[op.mes].push(op);
+        });
+
+        let prejuizoAcum = 0;
+        let html = '';
+        const months = Object.keys(byMonth).sort();
+
+        months.forEach(mes => {
+            const monthOps = byMonth[mes];
+            let mesVendas = 0, mesCusto = 0, mesGanho = 0, mesIsencao = 0;
+            let mesTributavel = 0, mesIRDevido = 0;
+            let mesAliq = 0;
+
+            monthOps.forEach(op => {
+                const c = irCalcOperacao(op);
+                mesVendas += op.vendas || 0;
+                mesCusto += op.custo || 0;
+                mesGanho += c.ganho;
+                mesIsencao += c.isencao;
+                mesTributavel += c.ganhoTributavel;
+                mesAliq = c.aliquota; // last one wins
+                mesIRDevido += c.irDevido;
+            });
+
+            // Apply previous month losses
+            let prejCompens = 0;
+            if (mesGanho > 0 && prejuizoAcum < 0) {
+                prejCompens = Math.max(mesGanho + prejuizoAcum, 0) < mesGanho
+                    ? Math.abs(prejuizoAcum)
+                    : mesGanho;
+                prejCompens = Math.min(prejCompens, Math.abs(prejuizoAcum));
+            }
+
+            const baseCalc = Math.max(0, mesTributavel - prejCompens);
+            const irFinal = baseCalc > 0 ? baseCalc * mesAliq : 0;
+            prejuizoAcum = mesGanho < 0 ? prejuizoAcum + mesGanho : prejuizoAcum + prejCompens * -1;
+            if (mesGanho >= 0 && prejCompens > 0) prejuizoAcum += prejCompens;
+            // Track remaining prejudice
+            if (mesGanho < 0) {
+                // already accumulated
+            } else {
+                // offset what was used
+                if (prejCompens > 0) {
+                    prejuizoAcum = Math.min(0, prejuizoAcum + prejCompens);
+                }
+            }
+
+            const isIsento = mesGanho <= 0 || mesIsencao > 0;
+            const irStatus = irFinal <= 0
+                ? `<span class="ir-status isento">✓ Isento</span>`
+                : `<span class="ir-status pendente">⚠ DARF Pendente</span>`;
+
+            const [year, month] = mes.split('-');
+            const mesLabel = new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+
+            html += `<tr>
+                <td style="font-weight:600;">${mesLabel}</td>
+                <td>${mesVendas.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                <td>${mesCusto.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                <td class="${mesGanho >= 0 ? 'positive' : 'negative'}" style="font-weight:600;">${mesGanho.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                <td style="color:var(--positive-color);">${mesIsencao > 0 ? mesIsencao.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) : '—'}</td>
+                <td>${mesTributavel.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                <td style="color:var(--warning-color);">${prejCompens > 0 ? '(-) ' + prejCompens.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) : '—'}</td>
+                <td style="font-weight:600;">${baseCalc.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                <td>${(mesAliq * 100).toFixed(1)}%</td>
+                <td style="font-weight:700; color:${irFinal > 0 ? 'var(--warning-color)' : 'var(--text-tertiary)'};">${irFinal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                <td>${irStatus}</td>
+                <td><button class="ir-action-btn" onclick="irDeleteMonth('${mes}')">🗑</button></td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+        irUpdateKPIs(ops);
+    }
+
+    function irUpdateKPIs(ops) {
+        let ganhoAno = 0, irAno = 0, prejAcum = 0;
+        const now = new Date();
+        const curMes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        let darfMes = 0;
+
+        // Calculate yearly totals considering loss carry-forward
+        const allYearOps = irOperacoes.filter(op => parseInt((op.mes || '').split('-')[0]) === irActiveYear);
+        allYearOps.sort((a, b) => (a.mes || '').localeCompare(b.mes || ''));
+
+        const byMonth = {};
+        allYearOps.forEach(op => {
+            if (!byMonth[op.mes]) byMonth[op.mes] = [];
+            byMonth[op.mes].push(op);
+        });
+
+        let runningPrej = 0;
+        Object.keys(byMonth).sort().forEach(mes => {
+            let mesGanho = 0, mesTributavel = 0, mesAliq = 0.15;
+            byMonth[mes].forEach(op => {
+                const c = irCalcOperacao(op);
+                mesGanho += c.ganho;
+                mesTributavel += c.ganhoTributavel;
+                mesAliq = c.aliquota;
+            });
+
+            ganhoAno += mesGanho;
+            let prejComp = 0;
+            if (mesGanho > 0 && runningPrej < 0) {
+                prejComp = Math.min(mesTributavel, Math.abs(runningPrej));
+                runningPrej += prejComp;
+            }
+            const base = Math.max(0, mesTributavel - prejComp);
+            const ir = base * mesAliq;
+            irAno += ir;
+            if (mesGanho < 0) runningPrej += mesGanho;
+            if (mes === curMes) darfMes = ir;
+        });
+        prejAcum = runningPrej;
+
+        const elGanho = document.getElementById('ir-kpi-ganho-ano');
+        const elIr = document.getElementById('ir-kpi-ir-ano');
+        const elDarf = document.getElementById('ir-kpi-darf-mes');
+        const elPrej = document.getElementById('ir-kpi-prejuizo');
+
+        if (elGanho) {
+            elGanho.textContent = ganhoAno.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            elGanho.className = `ir-kpi-value ${ganhoAno >= 0 ? 'positive' : 'negative'}`;
+        }
+        if (elIr) elIr.textContent = irAno.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+        if (elDarf) {
+            elDarf.textContent = darfMes.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            const card = document.getElementById('ir-kpi-darf-card');
+            if (card && darfMes > 0) {
+                card.style.borderColor = 'var(--warning-color)';
+                card.style.boxShadow = '0 0 0 1px rgba(245, 158, 11, 0.3)';
+            } else if (card) {
+                card.style.borderColor = '';
+                card.style.boxShadow = '';
+            }
+        }
+        if (elPrej) elPrej.textContent = (prejAcum < 0 ? Math.abs(prejAcum) : 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+    }
+
+    window.irDeleteMonth = function(mes) {
+        if (!confirm(`Apagar todas as operações de ${mes}?`)) return;
+        irOperacoes = irOperacoes.filter(op => op.mes !== mes);
+        irSaveStorage();
+        irRenderTable();
+    };
+
+    function irUpdateModalPreview() {
+        const classe = document.getElementById('ir-form-class')?.value || 'acoes';
+        const vendas = parseFloat(document.getElementById('ir-form-vendas')?.value) || 0;
+        const custo = parseFloat(document.getElementById('ir-form-custo')?.value) || 0;
+        const tempo = document.getElementById('ir-form-tempo')?.value || 'longo_2';
+        const pago = parseFloat(document.getElementById('ir-form-pago')?.value) || 0;
+        const op = { classe, vendas, custo, tempo, irPago: pago };
+        const c = irCalcOperacao(op);
+        const fmt = v => v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+        const elG = document.getElementById('irp-ganho');
+        const elI = document.getElementById('irp-isencao');
+        const elB = document.getElementById('irp-base');
+        const elD = document.getElementById('irp-devido');
+        if (elG) elG.textContent = fmt(c.ganho);
+        if (elI) elI.textContent = fmt(c.isencao);
+        if (elB) elB.textContent = fmt(c.ganhoTributavel);
+        if (elD) elD.textContent = fmt(c.irDevido);
+
+        // Show tempo only for Tesouro
+        const tempoWrap = document.getElementById('ir-form-tempo-wrap');
+        if (tempoWrap) tempoWrap.style.display = classe === 'tesouro' ? '' : 'none';
+    }
+
+    function initIR() {
+        irLoadStorage();
+
+        // Populate year selector
+        const yearSel = document.getElementById('ir-year-filter');
+        if (yearSel) {
+            const curYear = new Date().getFullYear();
+            for (let y = curYear; y >= curYear - 4; y--) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                if (y === irActiveYear) opt.selected = true;
+                yearSel.appendChild(opt);
+            }
+            yearSel.addEventListener('change', () => {
+                irActiveYear = parseInt(yearSel.value);
+                irRenderTable();
+            });
+        }
+
+        // Default month in modal
+        const formMes = document.getElementById('ir-form-mes');
+        if (formMes) {
+            const now = new Date();
+            formMes.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        // Filter buttons
+        const filterBtns = document.querySelectorAll('.ir-filter-btn');
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                irActiveClass = btn.getAttribute('data-class');
+                const badge = document.getElementById('ir-active-class-badge');
+                if (badge) badge.textContent = IR_CLASS_LABELS[irActiveClass] || irActiveClass;
+                irRenderTable();
+            });
+        });
+
+        // Open modal
+        const btnAdd = document.getElementById('btn-ir-add');
+        const irModal = document.getElementById('ir-modal');
+        if (btnAdd && irModal) {
+            btnAdd.addEventListener('click', () => {
+                irUpdateModalPreview();
+                irModal.classList.remove('hidden');
+            });
+        }
+
+        // Cancel modal
+        const btnCancel = document.getElementById('btn-ir-cancel');
+        if (btnCancel && irModal) {
+            btnCancel.addEventListener('click', () => irModal.classList.add('hidden'));
+        }
+        if (irModal) {
+            irModal.addEventListener('click', e => {
+                if (e.target === irModal) irModal.classList.add('hidden');
+            });
+        }
+
+        // Live preview in modal
+        ['ir-form-class', 'ir-form-vendas', 'ir-form-custo', 'ir-form-tempo', 'ir-form-pago'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', irUpdateModalPreview);
+        });
+
+        // Save operation
+        const btnSave = document.getElementById('btn-ir-save');
+        if (btnSave) {
+            btnSave.addEventListener('click', () => {
+                const classe = document.getElementById('ir-form-class')?.value;
+                const mes = document.getElementById('ir-form-mes')?.value;
+                const vendas = parseFloat(document.getElementById('ir-form-vendas')?.value) || 0;
+                const custo = parseFloat(document.getElementById('ir-form-custo')?.value) || 0;
+                const tempo = document.getElementById('ir-form-tempo')?.value || 'longo_2';
+                const pago = parseFloat(document.getElementById('ir-form-pago')?.value) || 0;
+                const obs = document.getElementById('ir-form-obs')?.value || '';
+
+                if (!mes || vendas <= 0) {
+                    alert('Preencha o mês e o valor total de vendas.');
+                    return;
+                }
+
+                irOperacoes.push({
+                    id: Date.now(),
+                    classe,
+                    mes,
+                    vendas,
+                    custo,
+                    tempo,
+                    irPago: pago,
+                    obs
+                });
+                irSaveStorage();
+
+                // Reset form
+                if (document.getElementById('ir-form-vendas')) document.getElementById('ir-form-vendas').value = '';
+                if (document.getElementById('ir-form-custo')) document.getElementById('ir-form-custo').value = '';
+                if (document.getElementById('ir-form-pago')) document.getElementById('ir-form-pago').value = '';
+                if (document.getElementById('ir-form-obs')) document.getElementById('ir-form-obs').value = '';
+
+                if (irModal) irModal.classList.add('hidden');
+
+                // Update year if needed
+                const opYear = parseInt(mes.split('-')[0]);
+                if (opYear !== irActiveYear) {
+                    irActiveYear = opYear;
+                    if (yearSel) yearSel.value = opYear;
+                }
+
+                irRenderTable();
+            });
+        }
+
+        irRenderTable();
+    }
+
+    initIR();
+
+    // ==== RAIO-X DO ATIVO MODAL ====
+    let raioxChartInstance = null;
+
+    function openRaioXModal(ticker) {
+        if (!window.dashboardState) return;
+        const { categories, yieldTransactions, investTransactions } = window.dashboardState;
+
+        // Find asset across categories
+        let assetData = null, assetClass = '', className = '';
+        for (const [catName, cat] of Object.entries(categories)) {
+            if (cat.ativos[ticker]) {
+                assetData = cat.ativos[ticker];
+                className = catName;
+                break;
+            }
+        }
+        if (!assetData) return;
+
+        // Determine asset class label and type
+        const classLabels = { 'FIIs': 'FII', 'Ações': 'Ação', 'ETFs': 'ETF', 'Tesouro Direto': 'TD' };
+        assetClass = classLabels[className] || className;
+
+        let typeLabel = className;
+        const tUp = ticker.toUpperCase();
+        if (className === 'FIIs') {
+            if (tUp.includes('KNCR') || tUp.includes('KNIP') || tUp.includes('IRDM') || tUp.includes('MXRF') || tUp.includes('BCFF') || tUp.includes('RECR') || tUp.includes('VGIR')) typeLabel = 'FII Papel';
+            else if (tUp.includes('HGLG') || tUp.includes('XPLG') || tUp.includes('BTLG') || tUp.includes('VILG') || tUp.includes('LVBI')) typeLabel = 'FII Logística';
+            else if (tUp.includes('MALL') || tUp.includes('XPML') || tUp.includes('VISC') || tUp.includes('HSML')) typeLabel = 'FII Shopping';
+            else typeLabel = 'FII';
+        }
+
+        // Compute KPIs
+        const quant = assetData.quant || 0;
+        const investedVal = assetData.investedVal !== undefined ? assetData.investedVal : assetData.totalVal;
+        const currentVal = assetData.totalVal || 0;
+        const avgPrice = quant > 0 ? investedVal / quant : 0;
+        const currentPrice = assetData.currentPrice || avgPrice;
+        const varPct = avgPrice > 0 ? ((currentPrice / avgPrice) - 1) * 100 : 0;
+        const varAbs = currentPrice - avgPrice;
+
+        // Total proventos for this ticker (all time, not year-filtered)
+        const allYieldTxs = yieldTransactions || [];
+        // We need ALL yield transactions, but yieldTransactions in dashboardState may be year-filtered.
+        // Re-parse from b3Data if needed, or use what we have
+        const tickerYields = allYieldTxs.filter(t => t.ticker === ticker);
+        const totalProventos = tickerYields.reduce((acc, t) => acc + t.valTotal, 0);
+
+        // Rentabilidade from rentabState
+        let totalReturn = 0;
+        let monthlyReturns = {};
+        if (window.rentabState && window.rentabState.individual && window.rentabState.individual[ticker]) {
+            totalReturn = window.rentabState.individual[ticker].totalReturn || 0;
+            monthlyReturns = window.rentabState.individual[ticker].monthly || {};
+        }
+
+        // Populate header
+        document.getElementById('raiox-title').textContent = `${ticker} — Raio-X`;
+        document.getElementById('raiox-class-badge').textContent = assetClass;
+        document.getElementById('raiox-ticker-name').textContent = ticker;
+        document.getElementById('raiox-full-name').textContent = className;
+        document.getElementById('raiox-type-badge').textContent = typeLabel;
+
+        // Badge colors by class
+        const badge = document.getElementById('raiox-class-badge');
+        const typeBadge = document.getElementById('raiox-type-badge');
+        if (className === 'FIIs') {
+            badge.style.background = 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(99,102,241,0.2))';
+            badge.style.color = '#93C5FD';
+            typeBadge.style.background = 'rgba(59,130,246,0.12)';
+            typeBadge.style.color = '#93C5FD';
+        } else if (className === 'Ações') {
+            badge.style.background = 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(168,85,247,0.2))';
+            badge.style.color = '#C4B5FD';
+            typeBadge.style.background = 'rgba(139,92,246,0.12)';
+            typeBadge.style.color = '#C4B5FD';
+        } else if (className === 'ETFs') {
+            badge.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(52,211,153,0.2))';
+            badge.style.color = '#6EE7B7';
+            typeBadge.style.background = 'rgba(16,185,129,0.12)';
+            typeBadge.style.color = '#6EE7B7';
+        } else {
+            badge.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.2))';
+            badge.style.color = '#FCD34D';
+            typeBadge.style.background = 'rgba(245,158,11,0.12)';
+            typeBadge.style.color = '#FCD34D';
+        }
+
+        // KPIs
+        document.getElementById('raiox-kpi-proventos').textContent = totalProventos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const rentabEl = document.getElementById('raiox-kpi-rentab');
+        rentabEl.textContent = totalReturn.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+        rentabEl.className = 'raiox-kpi-value ' + (totalReturn >= 0 ? 'positive' : 'negative');
+
+        document.getElementById('raiox-kpi-posicao').textContent = currentVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        document.getElementById('raiox-kpi-quant').textContent = quant.toLocaleString('pt-BR');
+        document.getElementById('raiox-kpi-pm').textContent = avgPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        const varEl = document.getElementById('raiox-kpi-var');
+        varEl.textContent = (varPct > 0 ? '+' : '') + varPct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+        varEl.className = 'raiox-kpi-value ' + (varPct >= 0 ? 'positive' : 'negative');
+        document.getElementById('raiox-kpi-var-abs').textContent = (varAbs >= 0 ? '+' : '') + varAbs.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        // ---- [NOVO] Seções: Rendimento por cota + Número Mágico ----
+        const yieldCardEl = document.getElementById('raiox-yield-card');
+        const magicCardEl = document.getElementById('raiox-magic-card');
+        const noYieldDataEl = document.getElementById('raiox-no-yield-data');
+        const sectionsHr = document.getElementById('raiox-sections-hr');
+
+        if (tickerYields.length === 0 || quant <= 0) {
+            // Ocultar ambas as seções, exibir mensagem
+            yieldCardEl.classList.add('hidden');
+            magicCardEl.classList.add('hidden');
+            noYieldDataEl.classList.remove('hidden');
+            sectionsHr.style.display = 'none';
+        } else {
+            noYieldDataEl.classList.add('hidden');
+
+            // Agrupar proventos por mês (contar apenas meses COM provento)
+            const yieldByMonth = {};
+            tickerYields.forEach(t => {
+                const key = t.monthKey; // YYYYMM
+                if (!yieldByMonth[key]) yieldByMonth[key] = 0;
+                yieldByMonth[key] += t.valTotal;
+            });
+
+            const monthsWithYield = Object.keys(yieldByMonth);
+            const numMonths = monthsWithYield.length;
+            const totalYieldSum = monthsWithYield.reduce((acc, k) => acc + yieldByMonth[k], 0);
+
+            // Rendimento médio por cota/mês = totalProventos ÷ meses com provento ÷ cotas atuais
+            const avgMonthlyYieldPerQuota = totalYieldSum / numMonths / quant;
+            const annualYieldPerQuota = avgMonthlyYieldPerQuota * 12;
+            const dyEstimado = currentPrice > 0 ? (annualYieldPerQuota / currentPrice) * 100 : 0;
+
+            // Populate Rendimento por cota card
+            document.getElementById('raiox-yield-value').textContent =
+                `R$ ${avgMonthlyYieldPerQuota.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / cota`;
+            document.getElementById('raiox-yield-subtitle').textContent =
+                `Baseado nos últimos ${numMonths} meses · R$ ${totalYieldSum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ÷ ${numMonths} meses ÷ ${quant.toLocaleString('pt-BR')} cotas`;
+            document.getElementById('raiox-yield-annual').textContent =
+                `R$ ${annualYieldPerQuota.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/cota`;
+            document.getElementById('raiox-yield-dy').textContent =
+                `DY ~${dyEstimado.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% a.a.`;
+
+            yieldCardEl.classList.remove('hidden');
+            sectionsHr.style.display = '';
+
+            // ---- Número Mágico: usar o valor já calculado na tabela do Resumo ----
+            // Recalcular o Número Mágico usando a mesma lógica do accordion (preço / rendimento mensal médio por cota)
+            let magicNumber = 0;
+            const yieldsForMagic = tickerYields.filter(t => t.quant > 0);
+            if (yieldsForMagic.length > 0 && currentPrice > 0) {
+                let magicMonthlyMap = {};
+                yieldsForMagic.forEach(t => {
+                    if (!magicMonthlyMap[t.monthKey]) magicMonthlyMap[t.monthKey] = [];
+                    magicMonthlyMap[t.monthKey].push(t.valTotal / t.quant);
+                });
+                let magicMonths = Object.keys(magicMonthlyMap).sort().slice(-12);
+                if (magicMonths.length > 0) {
+                    let sumAvgMagic = 0;
+                    magicMonths.forEach(m => {
+                        sumAvgMagic += magicMonthlyMap[m].reduce((a, b) => a + b, 0) / magicMonthlyMap[m].length;
+                    });
+                    let avgMonthYieldMagic = sumAvgMagic / magicMonths.length;
+                    if (avgMonthYieldMagic > 0) {
+                        magicNumber = Math.ceil(currentPrice / avgMonthYieldMagic);
+                    }
+                }
+            }
+
+            if (magicNumber > 0) {
+                const progressPct = Math.min((quant / magicNumber) * 100, 100);
+                const cotasFaltam = Math.max(magicNumber - quant, 0);
+                const valorFaltam = cotasFaltam * currentPrice;
+                const rendaAtualMes = avgMonthlyYieldPerQuota * quant;
+                const rendaMagicMes = avgMonthlyYieldPerQuota * magicNumber;
+                const pagaCota = rendaMagicMes >= currentPrice;
+
+                document.getElementById('raiox-magic-cotas').textContent = quant.toLocaleString('pt-BR');
+                document.getElementById('raiox-magic-number').textContent = magicNumber.toLocaleString('pt-BR');
+                document.getElementById('raiox-magic-renda').textContent = rendaAtualMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                document.getElementById('raiox-magic-pct-label').textContent = `${progressPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do número mágico`;
+                document.getElementById('raiox-magic-faltam-label').textContent =
+                    cotasFaltam > 0
+                        ? `Faltam ${cotasFaltam.toLocaleString('pt-BR')} cotas → ${valorFaltam.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                        : '✅ Número mágico atingido!';
+                document.getElementById('raiox-magic-progress-fill').style.width = `${Math.min(progressPct, 100)}%`;
+
+                const footerLeftText = `Com ${magicNumber.toLocaleString('pt-BR')} cotas, receberia/mês: ${rendaMagicMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} → ${pagaCota ? '✅ paga 1 cota' : '❌ não paga 1 cota'} (${currentPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`;
+                document.getElementById('raiox-magic-footer-left').textContent = footerLeftText;
+                document.getElementById('raiox-magic-footer-right').textContent = `Preço atual: ${currentPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+
+                magicCardEl.classList.remove('hidden');
+            } else {
+                magicCardEl.classList.add('hidden');
+            }
+        }
+
+        // ---- Proventos Chart ----
+        const chartWrap = document.getElementById('raiox-chart-wrap');
+        const noProvMsg = document.getElementById('raiox-no-proventos');
+        const canvas = document.getElementById('raiox-proventos-chart');
+
+        if (raioxChartInstance) { raioxChartInstance.destroy(); raioxChartInstance = null; }
+
+        if (tickerYields.length === 0) {
+            chartWrap.classList.add('hidden');
+            noProvMsg.classList.remove('hidden');
+        } else {
+            chartWrap.classList.remove('hidden');
+            noProvMsg.classList.add('hidden');
+
+            // Group by month
+            const byMonth = {};
+            tickerYields.forEach(t => {
+                const key = t.monthKey; // YYYYMM
+                const label = `${t.monthStr}/${t.yearKey.slice(-2)}`;
+                if (!byMonth[key]) byMonth[key] = { label, total: 0 };
+                byMonth[key].total += t.valTotal;
+            });
+            const sortedKeys = Object.keys(byMonth).sort();
+            const labels = sortedKeys.map(k => byMonth[k].label);
+            const values = sortedKeys.map(k => byMonth[k].total);
+            const lastIdx = values.length - 1;
+            const bgColors = values.map((_, i) => i === lastIdx ? '#34d399' : '#3b82f6');
+
+            raioxChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{ label: 'Proventos', data: values, backgroundColor: bgColors, barThickness: 'flex', maxBarThickness: 40 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: { display: true, anchor: 'end', align: 'top', font: { size: 10, weight: 'bold' },
+                            color: function() { return document.body.classList.contains('light-mode') ? '#111827' : '#E2E8F0'; },
+                            formatter: v => v > 0 ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748B', font: { size: 10 } } },
+                        y: { grace: '15%', grid: { borderDash: [4, 4], color: 'rgba(100,116,139,0.15)' }, ticks: { color: '#64748B', callback: v => v.toLocaleString('pt-BR') } }
+                    }
+                }
+            });
+        }
+
+        // ---- Purchase History ----
+        const purchasesTbody = document.getElementById('raiox-purchases-tbody');
+        const buyTxs = (investTransactions || []).filter(t => t.ticker === ticker && t.type === 'buy')
+            .sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+
+        if (buyTxs.length === 0) {
+            purchasesTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#64748B;">Nenhuma compra registrada.</td></tr>';
+        } else {
+            let html = '';
+            buyTxs.forEach(t => {
+                const unitPrice = t.quant > 0 ? Math.abs(t.value / t.quant) : 0;
+                html += `<tr>
+                    <td>${t.dateStr}</td>
+                    <td style="text-align:right;">${t.quant.toLocaleString('pt-BR')}</td>
+                    <td style="text-align:right;">${unitPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td style="text-align:right;">${Math.abs(t.value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                </tr>`;
+            });
+            // Average row
+            html += `<tr class="raiox-avg-row">
+                <td>Preço Médio</td>
+                <td style="text-align:right;">${quant.toLocaleString('pt-BR')}</td>
+                <td style="text-align:right;">${avgPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                <td style="text-align:right;">${investedVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            </tr>`;
+            purchasesTbody.innerHTML = html;
+        }
+
+        // ---- Rentabilidade Mensal Table ----
+        const rentabTbody = document.getElementById('raiox-rentab-tbody');
+        const sortedMonths = Object.keys(monthlyReturns).sort();
+
+        if (sortedMonths.length === 0) {
+            rentabTbody.innerHTML = '<tr><td colspan="15" style="text-align:center; padding:20px; color:#64748B;">Sem dados de rentabilidade.</td></tr>';
+        } else {
+            const byYear = {};
+            sortedMonths.forEach(m => {
+                const [year, month] = m.split('-');
+                if (!byYear[year]) byYear[year] = {};
+                byYear[year][parseInt(month)] = monthlyReturns[m];
+            });
+
+            const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+            let cumulativeProduct = 1;
+            const cumByYear = {};
+            const chronoYears = [...years].reverse();
+            chronoYears.forEach(year => {
+                let yearProduct = 1;
+                for (let m = 1; m <= 12; m++) {
+                    if (byYear[year][m] !== undefined) {
+                        yearProduct *= (1 + byYear[year][m] / 100);
+                        cumulativeProduct *= (1 + byYear[year][m] / 100);
+                    }
+                }
+                cumByYear[year] = { yearRet: (yearProduct - 1) * 100, cumRet: (cumulativeProduct - 1) * 100 };
+            });
+
+            let html = '';
+            years.forEach(year => {
+                let tr = `<td>${year}</td>`;
+                for (let m = 1; m <= 12; m++) {
+                    const val = byYear[year][m];
+                    if (val !== undefined) {
+                        const cls = val > 0.001 ? 'rentab-positive' : (val < -0.001 ? 'rentab-negative' : 'rentab-zero');
+                        tr += `<td class="${cls}">${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>`;
+                    } else {
+                        tr += `<td class="rentab-zero">-</td>`;
+                    }
+                }
+                const yRet = cumByYear[year].yearRet;
+                const cRet = cumByYear[year].cumRet;
+                tr += `<td class="rentab-acum-cell">${yRet.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>`;
+                tr += `<td class="rentab-acum-cell">${cRet.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>`;
+                html += `<tr>${tr}</tr>`;
+            });
+            rentabTbody.innerHTML = html;
+        }
+
+        // Show modal
+        const overlay = document.getElementById('raiox-overlay');
+        overlay.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeRaioXModal() {
+        const overlay = document.getElementById('raiox-overlay');
+        overlay.classList.add('hidden');
+        document.body.style.overflow = '';
+        if (raioxChartInstance) { raioxChartInstance.destroy(); raioxChartInstance = null; }
+    }
+
+    // Expose globally for inline onclick
+    window.openRaioXModal = openRaioXModal;
+
+    // Close handlers
+    document.getElementById('raiox-close')?.addEventListener('click', closeRaioXModal);
+    document.getElementById('raiox-overlay')?.addEventListener('click', (e) => {
+        if (e.target.id === 'raiox-overlay') closeRaioXModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const overlay = document.getElementById('raiox-overlay');
+            if (overlay && !overlay.classList.contains('hidden')) closeRaioXModal();
+        }
+    });
+
 });
+

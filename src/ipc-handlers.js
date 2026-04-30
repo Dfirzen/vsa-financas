@@ -8,6 +8,9 @@ const path = require('path');
 const { configService } = require('./services/config-service');
 const { marketDataService } = require('./services/market-data-service');
 const { aiService } = require('./services/ai-service');
+const { dividendsService } = require('./services/dividends-service');
+const { strategyService } = require('./services/strategy-service');
+const { conversationsService } = require('./services/conversations-service');
 
 function getBasePath() {
     return path.dirname(__dirname); // project root
@@ -236,6 +239,16 @@ function registerIpcHandlers() {
         return await marketDataService.getMonthlyPrices(tickers, period || '2y');
     });
 
+    ipcMain.handle('get-next-dividends', async (_event, tickers) => {
+        if (!tickers || tickers.length === 0) return {};
+        try {
+            return await dividendsService.getNextPaymentDates(tickers);
+        } catch (e) {
+            console.error('[IPC] get-next-dividends error:', e.message);
+            return {};
+        }
+    });
+
     // ==========================================
     // AI
     // ==========================================
@@ -244,19 +257,95 @@ function registerIpcHandlers() {
     });
 
     ipcMain.handle('ai-analyze', async (_event, data) => {
-        return await aiService.analyzePortfolio(data || {});
+        const strategyText = strategyService.getCurrentStrategySummary();
+        return await aiService.analyzePortfolio(data || {}, strategyText);
     });
 
     ipcMain.handle('ai-chat', async (_event, data) => {
         const sessionId = data.session_id || 'default';
         const message = data.message || '';
         const portfolioData = data.portfolio_data || null;
+        const conversationId = data.conversation_id || null;
 
         if (!message) {
             return { error: 'Message is required' };
         }
 
-        return await aiService.chat(sessionId, message, portfolioData);
+        // Persist user message
+        if (conversationId) {
+            conversationsService.appendMessage(conversationId, 'user', message);
+        }
+
+        const strategyText = strategyService.getCurrentStrategySummary();
+        const result = await aiService.chat(sessionId, message, portfolioData, strategyText);
+
+        // Persist bot response
+        if (conversationId && result.response) {
+            conversationsService.appendMessage(conversationId, 'bot', result.response);
+        }
+
+        return result;
+    });
+
+    // ==========================================
+    // STRATEGY
+    // ==========================================
+    ipcMain.handle('get-strategy', () => {
+        return strategyService.loadStrategy();
+    });
+
+    ipcMain.handle('infer-strategy', async (_event, data) => {
+        const portfolioData = data.portfolio_data || {};
+        const metas = data.metas || [];
+
+        // Only re-infer if portfolio has changed
+        if (!strategyService.needsReInference(portfolioData, metas)) {
+            const existing = strategyService.loadStrategy();
+            return { strategy: existing.current.summary, cached: true };
+        }
+
+        const result = await aiService.inferStrategy(portfolioData);
+        if (result.strategy) {
+            const hash = strategyService.getPortfolioHash(portfolioData, metas);
+            strategyService.saveStrategy({
+                summary: result.strategy,
+                portfolioHash: hash,
+                portfolioData,
+                metas
+            });
+        }
+        return result;
+    });
+
+    // ==========================================
+    // CONVERSATIONS
+    // ==========================================
+    ipcMain.handle('get-conversations', () => {
+        return conversationsService.getAllConversations();
+    });
+
+    ipcMain.handle('get-active-conversation', () => {
+        return conversationsService.getOrCreateActiveConversation();
+    });
+
+    ipcMain.handle('get-conversation-messages', (_event, conversationId) => {
+        return conversationsService.getMessages(conversationId);
+    });
+
+    ipcMain.handle('create-conversation', (_event, title) => {
+        return conversationsService.createConversation(title || null);
+    });
+
+    ipcMain.handle('set-active-conversation', (_event, conversationId) => {
+        return conversationsService.setActiveConversation(conversationId);
+    });
+
+    ipcMain.handle('delete-conversation', (_event, conversationId) => {
+        return conversationsService.deleteConversation(conversationId);
+    });
+
+    ipcMain.handle('rename-conversation', (_event, conversationId, newTitle) => {
+        return conversationsService.renameConversation(conversationId, newTitle);
     });
 
     // ==========================================

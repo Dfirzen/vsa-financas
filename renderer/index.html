@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https://fonts.googleapis.com https://fonts.gstatic.com;">
-    <title>InvestAI - Dashboard de Investimentos</title>
+    <title>V S & A — Visão, Solidez & Autonomia</title>
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -113,21 +113,22 @@
         <header class="top-nav">
             <div class="nav-left">
                 <div class="logo">
-                    <div class="logo-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2L2 22H22L12 2Z" fill="var(--primary-color)" />
-                            <path d="M12 9L7 19H17L12 9Z" fill="#fff" />
-                        </svg>
+                    <div class="logo-icon vsa-logo-icon">
+                        <img src="Icone.png" alt="V S & A" class="vsa-icon-img" />
                     </div>
-                    <h2>InvestAI</h2>
+                    <div class="vsa-brand">
+                        <h2 class="vsa-title"><strong>V</strong> <strong>S</strong> <span class="vsa-amp">&amp;</span> <strong>A</strong></h2>
+                        <span class="vsa-subtitle"><strong>V</strong>isão, <strong>S</strong>olidez <span class="vsa-amp-sub">&</span> <strong>A</strong>utonomia</span>
+                    </div>
                 </div>
                 <nav class="main-menu">
-                    <button class="nav-item active" data-target="visao-geral">Resumo</button>
-                    <button class="nav-item" data-target="proventos">Proventos</button>
-                    <button class="nav-item" data-target="patrimonio">Patrimônio</button>
-                    <button class="nav-item" data-target="rentabilidade">Rentabilidade</button>
-                    <button class="nav-item" data-target="metas">Metas</button>
-                    <button class="nav-item" data-target="analise">Análise</button>
+                    <button class="nav-item active" data-target="visao-geral">📊 Resumo</button>
+                    <button class="nav-item" data-target="proventos">💰 Proventos</button>
+                    <button class="nav-item" data-target="patrimonio">🏦 Patrimônio</button>
+                    <button class="nav-item" data-target="rentabilidade">📈 Rentabilidade</button>
+                    <button class="nav-item" data-target="metas">🎯 Metas</button>
+                    <button class="nav-item" data-target="analise">🤖 Análise</button>
+                    <button class="nav-item" data-target="ir-control" id="nav-ir">📋 IR</button>
                 </nav>
             </div>
 
@@ -138,6 +139,9 @@
                     </button>
                     <input type="file" id="excel-upload" accept=".xlsx" title="Importar Extrato B3">
                 </div>
+                <select class="nav-btn btn-outline" id="global-year-filter" style="min-width: 90px; appearance: auto; cursor: pointer; border-radius: 6px; padding: 6px 12px; font-weight: 500;">
+                    <!-- Preenchido via JS -->
+                </select>
                 <button class="nav-btn btn-outline" id="btn-refresh-quotes">
                     <span class="icon">🔄</span> Atualizar Cotações
                 </button>
@@ -161,7 +165,7 @@
                         <!-- Card 1 -->
                         <div class="card">
                             <div class="card-header-kpi">
-                                <h3>Patrimônio total</h3>
+                                <h3>💰 Patrimônio total</h3>
                             </div>
                             <div class="kpi-main-value">
                                 <span class="kpi-value" id="val-patrimonio">R$ 0,00</span>
@@ -178,7 +182,7 @@
                         <!-- Card 2 -->
                         <div class="card">
                             <div class="card-header-kpi">
-                                <h3>Lucro total</h3>
+                                <h3>📈 Lucro total</h3>
                             </div>
                             <div class="kpi-main-value">
                                 <span class="kpi-value positive" id="val-lucro">R$ 0,00</span>
@@ -198,7 +202,7 @@
                         <!-- Card 3 -->
                         <div class="card">
                             <div class="card-header-kpi">
-                                <h3>Proventos Recebidos (12M)</h3>
+                                <h3>💸 Proventos Recebidos (12M)</h3>
                             </div>
                             <div class="kpi-main-value">
                                 <span class="kpi-value" id="val-prov-12m">R$ 0,00</span>
@@ -354,9 +358,6 @@
                                         <button class="active" id="prov-btn-mensal">Mensal</button>
                                         <button id="prov-btn-anual">Anual</button>
                                     </div>
-                                    <select class="select-sm" id="prov-filter-ano">
-                                        <option value="Todos">Ano: Todos</option>
-                                    </select>
                                     <select class="select-sm" id="prov-filter-tipo">
                                         <option value="Todos">Tipo de ativo</option>
                                     </select>
@@ -418,13 +419,14 @@
                                             <th>Tipo de pagamento</th>
                                             <th>Data Com</th>
                                             <th>Data Pagamento</th>
+                                            <th>Próx. Pagto</th>
                                             <th>Quantidade</th>
                                             <th>Valor do div.</th>
                                             <th>Valor total</th>
                                         </tr>
                                     </thead>
                                     <tbody id="prov-list-tbody">
-                                        <tr><td colspan="9" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>
+                                        <tr><td colspan="10" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -542,6 +544,30 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Rentabilidade Individual -->
+                <div class="card rentab-individual-section mt-24">
+                    <div class="card-header" style="margin-bottom: 16px;">
+                        <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Rentabilidade por Ativo</h3>
+                        <div class="filter-group" style="display: flex; gap: 8px;">
+                            <select class="select-sm" id="rentab-indiv-class-filter">
+                                <option value="Todos">Todas as classes</option>
+                                <option value="Ações">Ações</option>
+                                <option value="FIIs">FIIs</option>
+                                <option value="ETFs">ETFs</option>
+                                <option value="Tesouro">Tesouro Direto</option>
+                            </select>
+                            <select class="select-sm" id="rentab-indiv-asset-filter">
+                                <option value="Todos">Todos os ativos</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="rentab-indiv-list" id="rentab-indiv-list-container" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Populated by JS -->
+                        <div style="text-align:center; color:var(--text-tertiary); padding: 20px;">Carregando rentabilidade individual...</div>
+                    </div>
+                </div>
             </section>
             <section id="metas" class="screen">
                 <!-- Metas em andamento -->
@@ -580,56 +606,372 @@
                     </div>
                 </div>
 
-                <!-- Auto Analysis Section -->
-                <div class="card ai-analysis-card">
+                <!-- Simulador de Aportes Section -->
+                <div class="card simulador-card">
                     <div class="card-header">
-                        <h3>🤖 Análise Inteligente do Portfólio</h3>
+                        <h3>📈 Simulador de Aportes</h3>
+                    </div>
+                    <div class="simulador-grid">
+                        <!-- Formulário de Entrada -->
+                        <div class="simulador-form">
+                            <div class="form-group">
+                                <label>Patrimônio Inicial (R$)</label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="number" id="sim-patrimonio" class="modal-input" value="0" step="100">
+                                    <button class="btn-outline btn-sm" id="btn-sim-use-current" title="Usar saldo atual da carteira">🔄</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Aporte Mensal (R$)</label>
+                                <input type="number" id="sim-aporte" class="modal-input" value="1000" step="100">
+                            </div>
+                            <div class="form-group">
+                                <label>Rentabilidade Total Anual (%)</label>
+                                <input type="number" id="sim-rentabilidade" class="modal-input" value="10" step="0.5">
+                            </div>
+                            <div class="form-group" style="position: relative;">
+                                <label>Dividend Yield Anual (%) <span style="font-size:0.75rem; color:var(--text-tertiary); cursor:help;" title="Fatia da rentabilidade total que retorna como proventos em dinheiro">ⓘ</span></label>
+                                <input type="number" id="sim-dy" class="modal-input" value="8" step="0.5">
+                                <span class="form-hint" style="font-size: 0.75rem; margin-top: 4px; display: block;">DY já está contido na Rent. Total</span>
+                            </div>
+                            <div class="form-group">
+                                <label>Período (Anos)</label>
+                                <input type="number" id="sim-anos" class="modal-input" value="10" step="1" min="1" max="50">
+                            </div>
+                        </div>
+
+                        <!-- Resultados Principais -->
+                        <div class="simulador-results">
+                            <div class="simulador-kpi-row" style="display: flex; gap: 16px;">
+                                <div class="card rentab-kpi-card" style="flex: 1;">
+                                    <h4 class="rentab-kpi-title" style="margin-bottom: 8px;">Patrimônio Projetado</h4>
+                                    <span class="rentab-kpi-value" id="sim-res-patrimonio" style="font-size: 1.5rem;">R$ 0,00</span>
+                                    <div class="kpi-subtext" style="margin-top: 8px;">
+                                        <div class="kpi-subtext-item" style="border-top: none; padding-top: 0;">
+                                            <span class="kpi-subtext-label">Total Aportado:</span>
+                                            <span style="font-weight: 500;" id="sim-res-aportado">R$ 0,00</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card rentab-kpi-card" style="flex: 1; border-color: var(--primary-color);">
+                                    <h4 class="rentab-kpi-title" style="margin-bottom: 8px;">Renda Passiva Mensal <span style="font-size: 0.8rem; font-weight: normal;">(Ano final)</span></h4>
+                                    <span class="rentab-kpi-value positive" id="sim-res-renda" style="font-size: 1.75rem;">R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <!-- Gráfico -->
+                            <div class="chart-container-large mt-16" style="height: 250px;">
+                                <canvas id="simuladorChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela Resumo -->
+                    <div class="table-responsive mt-24">
+                        <table class="assets-table simulador-table">
+                            <thead>
+                                <tr>
+                                    <th>Ano</th>
+                                    <th>Aporte Anual</th>
+                                    <th>Total Aportado</th>
+                                    <th>Juros do Ano</th>
+                                    <th>Soma de Juros</th>
+                                    <th>Patrimônio Final</th>
+                                    <th>Renda Mensal <span style="font-size: 0.75rem;">(Média)</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="sim-table-body" class="table-body">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Auto Analysis Section: Ativos vs Metas -->
+                <div class="card ai-analysis-card mt-24">
+                    <div class="card-header">
+                        <h3>🤖 Análise Inteligente: Ativos vs Metas</h3>
                         <div class="filter-group">
                             <button class="btn-outline btn-sm" id="btn-regenerate-analysis">🔄 Gerar Análise</button>
                         </div>
                     </div>
                     <div class="ai-analysis-content" id="ai-analysis-content">
                         <div class="ai-empty-state">
-                            <div class="ai-empty-icon">📊</div>
-                            <p>Importe seu extrato B3 e clique em <strong>"Gerar Análise"</strong> para receber uma análise completa do seu portfólio por IA.</p>
+                            <div class="ai-empty-icon">🎯</div>
+                            <p>O que acha de ver o alinhamento da sua carteira com as suas metas? Clique em <strong>"Gerar Análise"</strong> para receber insights da IA.</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Chat Section -->
-                <div class="card ai-chat-card">
-                    <div class="card-header">
-                        <h3>💬 Converse com a IA</h3>
-                        <button class="btn-outline btn-sm" id="btn-clear-chat" title="Limpar conversa">🗑️ Limpar</button>
-                    </div>
-                    <div class="ai-chat-messages" id="ai-chat-messages">
-                        <div class="ai-msg ai-msg-bot">
-                            <div class="ai-msg-avatar">🤖</div>
-                            <div class="ai-msg-bubble">
-                                Olá! Sou o <strong>InvestAI</strong>, seu consultor financeiro pessoal. 🚀<br><br>
-                                Importe seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!
+            </section>
+
+            <!-- =============================================
+                 CONTROLE DE IR
+                 ============================================= -->
+            <section id="ir-control" class="screen">
+                <div class="dashboard-grid">
+
+                    <!-- KPI Row -->
+                    <div class="ir-kpi-row">
+                        <div class="card ir-kpi-card">
+                            <div class="ir-kpi-icon">📈</div>
+                            <div class="ir-kpi-body">
+                                <span class="ir-kpi-label">Ganho Líquido no Ano</span>
+                                <span class="ir-kpi-value positive" id="ir-kpi-ganho-ano">R$ 0,00</span>
+                            </div>
+                        </div>
+                        <div class="card ir-kpi-card">
+                            <div class="ir-kpi-icon">💸</div>
+                            <div class="ir-kpi-body">
+                                <span class="ir-kpi-label">IR Total Apurado (Ano)</span>
+                                <span class="ir-kpi-value" id="ir-kpi-ir-ano">R$ 0,00</span>
+                            </div>
+                        </div>
+                        <div class="card ir-kpi-card" id="ir-kpi-darf-card">
+                            <div class="ir-kpi-icon">🧾</div>
+                            <div class="ir-kpi-body">
+                                <span class="ir-kpi-label">DARF do Mês Atual</span>
+                                <span class="ir-kpi-value" id="ir-kpi-darf-mes">R$ 0,00</span>
+                                <span class="ir-kpi-sub" id="ir-kpi-darf-venc">Vence último dia útil do mês</span>
+                            </div>
+                        </div>
+                        <div class="card ir-kpi-card">
+                            <div class="ir-kpi-icon">🔻</div>
+                            <div class="ir-kpi-body">
+                                <span class="ir-kpi-label">Prejuízo Acumulado</span>
+                                <span class="ir-kpi-value negative" id="ir-kpi-prejuizo">R$ 0,00</span>
+                                <span class="ir-kpi-sub">Compensável em meses futuros</span>
                             </div>
                         </div>
                     </div>
-                    <div class="ai-chat-input-wrapper">
-                        <div class="ai-typing-indicator hidden" id="ai-typing">
-                            <span class="ai-typing-dot"></span>
-                            <span class="ai-typing-dot"></span>
-                            <span class="ai-typing-dot"></span>
-                            <span class="ai-typing-text">InvestAI está pensando...</span>
-                        </div>
-                        <div class="ai-chat-input-row">
-                            <input type="text" id="ai-chat-input" class="ai-chat-input" placeholder="Pergunte sobre seus investimentos..." autocomplete="off" />
-                            <button class="ai-chat-send" id="btn-send-chat" title="Enviar">
-                                <span>➤</span>
-                            </button>
+
+                    <!-- Info Banner & Filters -->
+                    <div class="card" style="padding: 16px 20px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                            <div style="display:flex; align-items:center; gap: 12px;">
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;" id="ir-class-filters">
+                                    <button class="ir-filter-btn active" data-class="acoes">📊 Ações</button>
+                                    <button class="ir-filter-btn" data-class="fiis">🏢 FIIs</button>
+                                    <button class="ir-filter-btn" data-class="etfs">🌐 ETFs</button>
+                                    <button class="ir-filter-btn" data-class="tesouro">🟡 Tesouro Direto</button>
+                                    <button class="ir-filter-btn" data-class="todos">📋 Todos</button>
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <!-- Filtro de ano global controla os anos do IR -->
+                                <button class="btn-primary btn-sm" id="btn-ir-add">+ Registrar Venda</button>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Tabela mensal -->
+                    <div class="card" style="padding: 0; overflow: hidden;">
+                        <div class="card-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
+                            <h3>📅 Apuração Mensal</h3>
+                            <span class="ir-class-badge" id="ir-active-class-badge">Ações</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="assets-table">
+                                <thead>
+                                    <tr>
+                                        <th>Mês</th>
+                                        <th>Vendas (R$)</th>
+                                        <th>Custo (R$)</th>
+                                        <th>Ganho Bruto</th>
+                                        <th>Isenção</th>
+                                        <th>Ganho Tributável</th>
+                                        <th>Prej. Compens.</th>
+                                        <th>Base de Cálculo</th>
+                                        <th>IR Alíq.</th>
+                                        <th>IR Devido</th>
+                                        <th>Status</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ir-table-body" class="table-body">
+                                    <tr>
+                                        <td colspan="12" style="text-align:center; color:var(--text-tertiary); padding: 40px;">
+                                            Nenhuma operação registrada. Clique em <strong>+ Registrar Venda</strong> para começar.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Legenda de Regras de IR -->
+                    <div class="card ir-rules-card">
+                        <h4 style="margin-bottom: 12px; font-size: 0.9rem;">📖 Regras Tributárias Aplicadas</h4>
+                        <div class="ir-rules-grid">
+                            <div class="ir-rule-item">
+                                <span class="ir-rule-label">📊 Ações (swing trade)</span>
+                                <span class="ir-rule-desc">15% sobre ganhos. Isenção se vendas ≤ R$ 20.000/mês.</span>
+                            </div>
+                            <div class="ir-rule-item">
+                                <span class="ir-rule-label">📊 Ações (day trade)</span>
+                                <span class="ir-rule-desc">20% sobre ganhos. Sem isenção.</span>
+                            </div>
+                            <div class="ir-rule-item">
+                                <span class="ir-rule-label">🏢 FIIs</span>
+                                <span class="ir-rule-desc">Proventos isentos PF. Ganho de capital na venda: 20%.</span>
+                            </div>
+                            <div class="ir-rule-item">
+                                <span class="ir-rule-label">🌐 ETFs</span>
+                                <span class="ir-rule-desc">15% (LP) ou 20% (day trade). Sem isenção de R$20k.</span>
+                            </div>
+                            <div class="ir-rule-item">
+                                <span class="ir-rule-label">🟡 Tesouro Direto</span>
+                                <span class="ir-rule-desc">Tabela regressiva: 22,5% (até 180d) → 15% (acima de 720d).</span>
+                            </div>
+                            <div class="ir-rule-item">
+                                <span class="ir-rule-label">🔻 Prejuízo</span>
+                                <span class="ir-rule-desc">Compensável dentro da mesma classe de ativo em meses futuros.</span>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </section>
 
         </main>
     </div>
+
+    <!-- Modal: Registrar Venda para IR -->
+    <div id="ir-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 520px;">
+            <h3>📋 Registrar Operação</h3>
+            <div class="modal-body">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Classe de Ativo</label>
+                        <select id="ir-form-class" class="modal-input">
+                            <option value="acoes">📊 Ações (Swing Trade)</option>
+                            <option value="acoes_day">📊 Ações (Day Trade)</option>
+                            <option value="fiis">🏢 FIIs</option>
+                            <option value="etfs">🌐 ETFs</option>
+                            <option value="tesouro">🟡 Tesouro Direto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Mês de Referência</label>
+                        <input type="month" id="ir-form-mes" class="modal-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Total de Vendas (R$)</label>
+                        <input type="number" id="ir-form-vendas" class="modal-input" placeholder="0,00" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Custo Total (R$)</label>
+                        <input type="number" id="ir-form-custo" class="modal-input" placeholder="0,00" step="0.01" min="0">
+                    </div>
+                    <div class="form-group" id="ir-form-tempo-wrap">
+                        <label>Tempo de posse</label>
+                        <select id="ir-form-tempo" class="modal-input">
+                            <option value="curto">Curto (≤ 180 dias) — 22,5%</option>
+                            <option value="medio">Médio (181–360d) — 20%</option>
+                            <option value="longo_1">Longo (361–720d) — 17,5%</option>
+                            <option value="longo_2" selected>Longo (> 720d) — 15%</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>IR já pago (Retido na Fonte)</label>
+                        <input type="number" id="ir-form-pago" class="modal-input" placeholder="0,00" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <!-- Preview calculado -->
+                <div class="ir-preview-box" id="ir-form-preview">
+                    <div class="ir-preview-row">
+                        <span>Ganho Bruto:</span><strong id="irp-ganho">R$ 0,00</strong>
+                    </div>
+                    <div class="ir-preview-row">
+                        <span>Isenção aplicável:</span><strong id="irp-isencao" style="color:var(--positive-color)">R$ 0,00</strong>
+                    </div>
+                    <div class="ir-preview-row">
+                        <span>Base de Cálculo:</span><strong id="irp-base">R$ 0,00</strong>
+                    </div>
+                    <div class="ir-preview-row" style="border-top: 1px solid var(--border-color); padding-top: 8px; margin-top: 4px;">
+                        <span>IR Devido:</span><strong id="irp-devido" style="color:var(--warning-color); font-size:1.1rem;">R$ 0,00</strong>
+                    </div>
+                </div>
+
+                <div class="form-group mt-8">
+                    <label>Observação (opcional)</label>
+                    <input type="text" id="ir-form-obs" class="modal-input" placeholder="Ex: Venda de ITSA4, MXRF11...">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline btn-sm" id="btn-ir-cancel">Cancelar</button>
+                <button class="btn-primary btn-sm" id="btn-ir-save">💾 Salvar Operação</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- === CHAT SIDEBAR LATERAL (persistente em todas as telas) === -->
+    <button class="chat-fab" id="btn-toggle-chat" title="Abrir chat com IA">
+        <span class="chat-fab-icon">💬</span>
+        <span class="chat-fab-badge hidden" id="chat-fab-badge">1</span>
+    </button>
+
+    <div class="chat-drawer" id="chat-drawer">
+        <!-- Drag handle for resize -->
+        <div class="chat-drawer-resize-handle" id="chat-resize-handle"></div>
+
+        <!-- Conversation List Panel -->
+        <div class="chat-conv-panel" id="chat-conv-panel">
+            <div class="chat-conv-panel-header">
+                <span class="chat-conv-panel-title">Conversas</span>
+                <button class="chat-conv-new-btn" id="btn-new-conversation" title="Nova conversa">＋</button>
+            </div>
+            <div class="chat-conv-list" id="chat-conv-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-main-area">
+            <div class="chat-drawer-header">
+                <div class="chat-drawer-title">
+                    <span class="chat-drawer-avatar">🤖</span>
+                    <div>
+                        <div class="chat-drawer-name"><strong>V S &amp; A</strong> — Assistente IA</div>
+                        <div class="chat-drawer-status" id="chat-online-status">● Pronto para conversar</div>
+                    </div>
+                </div>
+                <div class="chat-drawer-actions">
+                    <div class="chat-strategy-badge hidden" id="chat-strategy-badge" title="Estratégia inferida">
+                        <span>🧠</span>
+                    </div>
+                    <button class="chat-drawer-btn" id="btn-close-chat" title="Fechar">✕</button>
+                </div>
+            </div>
+            <div class="ai-chat-messages" id="ai-chat-messages">
+                <div class="ai-msg ai-msg-bot">
+                    <div class="ai-msg-avatar">🤖</div>
+                    <div class="ai-msg-bubble">
+                        Olá! Sou o assistente <strong>V S &amp; A</strong>. 🚀<br><br>
+                        Importe seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!
+                    </div>
+                </div>
+            </div>
+            <div class="ai-chat-input-wrapper">
+                <div class="ai-typing-indicator hidden" id="ai-typing">
+                    <span class="ai-typing-dot"></span>
+                    <span class="ai-typing-dot"></span>
+                    <span class="ai-typing-dot"></span>
+                    <span class="ai-typing-text">Assistente está pensando...</span>
+                </div>
+                <div class="ai-chat-input-row">
+                    <input type="text" id="ai-chat-input" class="ai-chat-input" placeholder="Pergunte sobre seus investimentos..." autocomplete="off" />
+                    <button class="ai-chat-send" id="btn-send-chat" title="Enviar">
+                        <span>➤</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="chat-drawer-overlay hidden" id="chat-overlay"></div>
+
 
     <!-- Reference to Template for Accordion Row -->
     <template id="template-asset-group">
@@ -688,6 +1030,236 @@
             </div>
         </div>
     </template>
+
+    <!-- Template para Accordion de Rentabilidade Individual -->
+    <template id="template-rentab-indiv">
+        <div class="asset-group rentab-indiv-group">
+            <div class="asset-group-header">
+                <div class="group-title" style="min-width: 120px;">
+                    <div class="group-icon rentab-indiv-icon">📊</div>
+                    <span class="group-name rentab-indiv-ticker">TICKER</span>
+                </div>
+                <div class="group-stat" style="width: 100px;">
+                    <span class="group-stat-label">Classe</span>
+                    <span class="group-stat-val rentab-indiv-class" style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Classe</span>
+                </div>
+                <div class="group-stat" style="width: 120px;">
+                    <span class="group-stat-label">Posição Atual</span>
+                    <span class="group-stat-val rentab-indiv-posicao" style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">R$ 0,00</span>
+                </div>
+                <div class="group-stat" style="text-align: right; width: 100%; align-items: flex-end;">
+                    <span class="group-stat-label">Rentabilidade Histórica</span>
+                    <span class="group-stat-val rent-pct rentab-indiv-total-pct">0,00%</span>
+                </div>
+                <div class="toggle-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 9l6 6 6-6" />
+                    </svg>
+                </div>
+            </div>
+            <div class="asset-group-content" style="background: var(--bg-app); border-top: 1px solid var(--border-color); padding: 0;">
+                <table class="rentab-monthly-table" style="margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th>Ano</th>
+                            <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
+                            <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+                            <th>Ano</th>
+                            <th>Acumulado</th>
+                        </tr>
+                    </thead>
+                    <tbody class="rentab-indiv-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <!-- =============================================
+         MODAL: RAIO-X DO ATIVO
+         ============================================= -->
+    <div id="raiox-overlay" class="raiox-overlay hidden">
+        <div id="raiox-modal" class="raiox-modal">
+            <!-- Title Bar (estilo janela nativa) -->
+            <div class="raiox-titlebar">
+                <div class="raiox-titlebar-left">
+                    <div class="raiox-traffic-lights">
+                        <span class="raiox-dot raiox-dot-red" id="raiox-close" title="Fechar"></span>
+                        <span class="raiox-dot raiox-dot-yellow"></span>
+                        <span class="raiox-dot raiox-dot-green"></span>
+                    </div>
+                    <span class="raiox-titlebar-text" id="raiox-title">TICKER — Raio-X</span>
+                </div>
+            </div>
+
+            <!-- Modal Body (scrollable) -->
+            <div class="raiox-body" id="raiox-body">
+
+                <!-- Cabeçalho do ativo -->
+                <div class="raiox-header">
+                    <div class="raiox-header-left">
+                        <span class="raiox-class-badge" id="raiox-class-badge">FII</span>
+                        <div class="raiox-header-info">
+                            <h2 id="raiox-ticker-name" class="raiox-ticker-name">KNCR11</h2>
+                            <span id="raiox-full-name" class="raiox-full-name">Nome completo do ativo</span>
+                        </div>
+                    </div>
+                    <span class="raiox-type-badge" id="raiox-type-badge">FII Papel</span>
+                </div>
+
+                <!-- KPIs Grid (3 colunas) -->
+                <div class="raiox-kpi-grid">
+                    <div class="raiox-kpi-card">
+                        <span class="raiox-kpi-label">💰 Total em Proventos</span>
+                        <span class="raiox-kpi-value" id="raiox-kpi-proventos">R$ 0,00</span>
+                    </div>
+                    <div class="raiox-kpi-card">
+                        <span class="raiox-kpi-label">📈 Rentabilidade Acumulada</span>
+                        <span class="raiox-kpi-value" id="raiox-kpi-rentab">0,00%</span>
+                    </div>
+                    <div class="raiox-kpi-card">
+                        <span class="raiox-kpi-label">🏦 Posição Atual</span>
+                        <span class="raiox-kpi-value" id="raiox-kpi-posicao">R$ 0,00</span>
+                    </div>
+                    <div class="raiox-kpi-card">
+                        <span class="raiox-kpi-label">📦 Quantidade de Cotas</span>
+                        <span class="raiox-kpi-value" id="raiox-kpi-quant">0</span>
+                    </div>
+                    <div class="raiox-kpi-card">
+                        <span class="raiox-kpi-label">💲 Preço Médio</span>
+                        <span class="raiox-kpi-value" id="raiox-kpi-pm">R$ 0,00</span>
+                    </div>
+                    <div class="raiox-kpi-card">
+                        <span class="raiox-kpi-label">📊 Variação desde PM</span>
+                        <span class="raiox-kpi-value" id="raiox-kpi-var">0,00%</span>
+                        <span class="raiox-kpi-subvalue" id="raiox-kpi-var-abs">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <!-- [NOVO] Seção: Rendimento por cota + Número Mágico -->
+                <div id="raiox-yield-sections">
+
+                    <!-- Mensagem se não houver proventos -->
+                    <div id="raiox-no-yield-data" class="raiox-empty-msg hidden" style="margin: 20px 0;">
+                        Sem proventos registrados para calcular rendimento por cota.
+                    </div>
+
+                    <!-- Card 1: Rendimento médio por cota/mês -->
+                    <div id="raiox-yield-card" class="raiox-yield-card hidden">
+                        <div class="raiox-yield-card-inner">
+                            <div class="raiox-yield-left">
+                                <span class="raiox-yield-title">💰 Rendimento médio por cota/mês</span>
+                                <span class="raiox-yield-main-value" id="raiox-yield-value">R$ 0,00 / cota</span>
+                                <span class="raiox-yield-subtitle" id="raiox-yield-subtitle">Baseado nos últimos 0 meses</span>
+                            </div>
+                            <div class="raiox-yield-right">
+                                <span class="raiox-yield-ann-label">Anualizado</span>
+                                <span class="raiox-yield-ann-value" id="raiox-yield-annual">R$ 0,00/cota</span>
+                                <span class="raiox-yield-dy" id="raiox-yield-dy">DY ~0,0% a.a.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Separador -->
+                    <hr class="raiox-section-hr" id="raiox-sections-hr" style="display:none;">
+
+                    <!-- Card 2: Progresso para o Número Mágico -->
+                    <div id="raiox-magic-card" class="raiox-magic-card hidden">
+                        <!-- Linha superior: 3 colunas -->
+                        <div class="raiox-magic-top-row">
+                            <div class="raiox-magic-col">
+                                <span class="raiox-magic-label">📦 Cotas atuais</span>
+                                <span class="raiox-magic-val" id="raiox-magic-cotas">0</span>
+                            </div>
+                            <div class="raiox-magic-col">
+                                <span class="raiox-magic-label">🎯 Número Mágico</span>
+                                <span class="raiox-magic-val" id="raiox-magic-number">-</span>
+                            </div>
+                            <div class="raiox-magic-col">
+                                <span class="raiox-magic-label">💸 Renda gerada/mês</span>
+                                <span class="raiox-magic-val" id="raiox-magic-renda">R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <!-- Barra de progresso -->
+                        <div class="raiox-magic-progress-wrap">
+                            <div class="raiox-magic-progress-labels">
+                                <span id="raiox-magic-pct-label">0% do número mágico</span>
+                                <span id="raiox-magic-faltam-label">Faltam 0 cotas → R$ 0,00</span>
+                            </div>
+                            <div class="raiox-magic-progress-track">
+                                <div class="raiox-magic-progress-fill" id="raiox-magic-progress-fill" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Rodapé: 2 colunas -->
+                        <div class="raiox-magic-footer">
+                            <span class="raiox-magic-footer-left" id="raiox-magic-footer-left">
+                                Com 0 cotas, receberia/mês: R$ 0,00
+                            </span>
+                            <span class="raiox-magic-footer-right" id="raiox-magic-footer-right">
+                                Preço atual: R$ 0,00
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Gráfico de Proventos Mensais -->
+                <div class="raiox-section">
+                    <h3 class="raiox-section-title">📊 Proventos Mensais</h3>
+                    <div class="raiox-chart-container" id="raiox-chart-wrap">
+                        <canvas id="raiox-proventos-chart"></canvas>
+                    </div>
+                    <div id="raiox-no-proventos" class="raiox-empty-msg hidden">
+                        Nenhum provento registrado para este ativo.
+                    </div>
+                </div>
+
+                <!-- Histórico de Compras -->
+                <div class="raiox-section">
+                    <h3 class="raiox-section-title">🛒 Histórico de Compras</h3>
+                    <div class="table-responsive">
+                        <table class="raiox-table" id="raiox-purchases-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Quantidade</th>
+                                    <th>Preço Unitário</th>
+                                    <th>Valor Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="raiox-purchases-tbody">
+                                <tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-tertiary);">Nenhuma compra registrada.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Rentabilidade Mensal -->
+                <div class="raiox-section">
+                    <h3 class="raiox-section-title">📈 Rentabilidade Mensal</h3>
+                    <div class="table-responsive">
+                        <table class="rentab-monthly-table raiox-rentab-table" id="raiox-rentab-table">
+                            <thead>
+                                <tr>
+                                    <th>Ano</th>
+                                    <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
+                                    <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+                                    <th>Ano</th>
+                                    <th>Acumulado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="raiox-rentab-tbody">
+                                <tr><td colspan="15" style="text-align:center; padding:20px; color:var(--text-tertiary);">Sem dados de rentabilidade.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>

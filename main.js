@@ -21,7 +21,7 @@ function createWindow() {
         minWidth: 1024,
         minHeight: 700,
         icon: path.join(__dirname, 'Icone.png'),
-        title: 'InvestAI',
+        title: 'V S & A',
         backgroundColor: '#15191C', // Match app background for instant paint
         show: false, // Don't show until ready
         webPreferences: {
