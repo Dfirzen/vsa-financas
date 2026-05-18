@@ -33,7 +33,17 @@
     <!-- Modal for Editing Metas -->
     <div id="meta-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h3 id="modal-title">Editar Meta</h3>
+            <!-- Titlebar (Design System) -->
+            <div class="modal-titlebar">
+                <div class="modal-titlebar-left">
+                    <div class="modal-traffic-lights">
+                        <span class="modal-dot modal-dot-red" data-modal-close="meta-modal" title="Fechar"></span>
+                        <span class="modal-dot modal-dot-yellow"></span>
+                        <span class="modal-dot modal-dot-green"></span>
+                    </div>
+                    <span class="modal-titlebar-text" id="modal-title">Editar Meta</span>
+                </div>
+            </div>
             <div class="modal-body">
                 <input type="hidden" id="edit-meta-id">
                 <div class="form-group">
@@ -52,59 +62,186 @@
         </div>
     </div>
 
-    <!-- Modal de Configurações / Boas-vindas -->
+    <!-- Modal de Configurações (Redesign com Abas) -->
     <div id="config-modal" class="modal-overlay hidden">
         <div class="modal-content config-modal-content">
-            <div class="config-modal-header">
-                <div class="config-modal-icon">⚙️</div>
-                <h3 id="config-modal-title">Configurações</h3>
-                <p class="config-modal-desc" id="config-modal-desc">Configure seu aplicativo para começar a usar.</p>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>👤 Seu Nome</label>
-                    <input type="text" id="config-user-name" class="modal-input" placeholder="Ex: Diego">
-                </div>
-                <div class="form-group">
-                    <label>📁 Caminho do Extrato B3 (.xlsx)</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="config-excel-path" class="modal-input" placeholder="Ex: C:\Users\Diego\Downloads\Extrato.xlsx" style="flex: 1;">
-                        <button class="btn-outline btn-sm" id="btn-browse-excel" title="Procurar arquivo">📂</button>
+            <!-- Titlebar (Design System) -->
+            <div class="modal-titlebar">
+                <div class="modal-titlebar-left">
+                    <div class="modal-traffic-lights">
+                        <span class="modal-dot modal-dot-red" data-modal-close="config-modal" title="Fechar"></span>
+                        <span class="modal-dot modal-dot-yellow"></span>
+                        <span class="modal-dot modal-dot-green"></span>
                     </div>
-                    <span class="form-hint">Caminho completo do arquivo no seu computador. Deixe vazio para importar manualmente.</span>
-                </div>
-                <hr class="config-divider">
-                <div class="form-group">
-                    <label>🤖 Provedor de IA</label>
-                    <div class="ai-provider-selector">
-                        <button class="provider-btn active" data-provider="gemini">
-                            <span class="provider-icon">✨</span>
-                            <span class="provider-name">Gemini</span>
-                            <span class="provider-model">gemini-2.0-flash</span>
-                        </button>
-                        <button class="provider-btn" data-provider="openai">
-                            <span class="provider-icon">🟢</span>
-                            <span class="provider-name">ChatGPT</span>
-                            <span class="provider-model">gpt-4o-mini</span>
-                        </button>
-                        <button class="provider-btn" data-provider="anthropic">
-                            <span class="provider-icon">🟠</span>
-                            <span class="provider-name">Claude</span>
-                            <span class="provider-model">claude-3.5-sonnet</span>
-                        </button>
-                    </div>
-                    <input type="hidden" id="config-ai-provider" value="gemini">
-                </div>
-                <div class="form-group">
-                    <label id="config-api-key-label">🔑 API Key do Gemini</label>
-                    <input type="password" id="config-ai-key" class="modal-input" placeholder="Cole sua API Key aqui">
-                    <span class="form-hint" id="config-api-key-hint">Gere gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--primary-color);">aistudio.google.com/apikey</a></span>
-                    <span class="config-key-status" id="config-key-status"></span>
+                    <span class="modal-titlebar-text">⚙️ Configurações</span>
                 </div>
             </div>
-            <div class="modal-actions">
+
+            <!-- Tab Navigation Bar -->
+            <div class="config-tabs-bar">
+                <button class="config-tab-btn active" data-config-tab="perfil">
+                    <span class="config-tab-icon">👤</span> Perfil
+                </button>
+                <button class="config-tab-btn" data-config-tab="extrato">
+                    <span class="config-tab-icon">📄</span> Extrato B3
+                </button>
+                <button class="config-tab-btn" data-config-tab="ia">
+                    <span class="config-tab-icon">🧠</span> Inteligência Artificial
+                </button>
+                <button class="config-tab-btn" data-config-tab="sobre">
+                    <span class="config-tab-icon">ℹ️</span> Sobre
+                </button>
+            </div>
+
+            <!-- Tab Panels Container -->
+            <div class="config-panels-container">
+
+                <!-- ===== ABA 1: Perfil ===== -->
+                <div class="config-tab-panel active" id="config-panel-perfil">
+                    <!-- Nome -->
+                    <div class="config-section">
+                        <span class="config-section-label">COMO O APP DEVE TE CHAMAR?</span>
+                        <div class="config-input-wrapper">
+                            <span class="config-input-icon">👤</span>
+                            <input type="text" id="config-user-name" class="modal-input config-input-with-icon" placeholder="Ex: Diego">
+                        </div>
+                        <span class="form-hint">Este nome será usado nos cumprimentos e relatórios do sistema.</span>
+                    </div>
+
+                    <!-- Aparência -->
+                    <div class="config-section">
+                        <span class="config-section-label">APARÊNCIA</span>
+                        <div class="config-theme-cards">
+                            <button class="config-theme-card" data-theme="light">
+                                <span class="config-theme-icon" style="color: #f59e0b;">☀️</span>
+                                <span class="config-theme-name">Claro</span>
+                            </button>
+                            <button class="config-theme-card active" data-theme="dark">
+                                <span class="config-theme-icon" style="color: #60a5fa;">🌙</span>
+                                <span class="config-theme-name">Escuro</span>
+                            </button>
+                            <button class="config-theme-card" data-theme="system">
+                                <span class="config-theme-icon" style="color: #8892a4;">🖥️</span>
+                                <span class="config-theme-name">Sistema</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Moeda padrão -->
+                    <div class="config-section">
+                        <span class="config-section-label">MOEDA PADRÃO</span>
+                        <div class="config-currency-dropdown">
+                            <span class="config-currency-icon">R$</span>
+                            <span class="config-currency-text">Real Brasileiro (BRL)</span>
+                            <span class="config-currency-arrow">▼</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== ABA 2: Extrato B3 ===== -->
+                <div class="config-tab-panel" id="config-panel-extrato">
+                    <!-- Arquivo do extrato -->
+                    <div class="config-section">
+                        <span class="config-section-label">ARQUIVO DO EXTRATO</span>
+                        <div class="config-file-input-row">
+                            <input type="text" id="config-excel-path" class="modal-input config-file-input" placeholder="Ex: C:\Users\Diego\Downloads\Extrato.xlsx">
+                            <button class="config-file-browse-btn" id="btn-browse-excel" title="Procurar arquivo">📂</button>
+                        </div>
+                        <span class="form-hint">Caminho completo do arquivo no seu computador. Deixe vazio para importar manualmente.</span>
+                    </div>
+
+                    <!-- Última sincronização -->
+                    <div class="config-section">
+                        <span class="config-section-label">ÚLTIMA SINCRONIZAÇÃO</span>
+                        <div class="config-sync-card" id="config-sync-card">
+                            <div class="config-sync-info">
+                                <span class="config-sync-icon">🕐</span>
+                                <div class="config-sync-text">
+                                    <span class="config-sync-date" id="config-sync-date">Nunca sincronizado</span>
+                                    <span class="config-sync-status" id="config-sync-status">—</span>
+                                </div>
+                            </div>
+                            <button class="config-sync-btn" id="btn-config-sync">
+                                🔄 Sincronizar agora
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== ABA 3: Inteligência Artificial ===== -->
+                <div class="config-tab-panel" id="config-panel-ia">
+                    <!-- Provedor de IA -->
+                    <div class="config-section">
+                        <span class="config-section-label">PROVEDOR DE IA</span>
+                        <div class="ai-provider-selector">
+                            <button class="provider-btn active" data-provider="gemini">
+                                <span class="provider-icon">✨</span>
+                                <span class="provider-name">Gemini</span>
+                                <span class="provider-model">gemini-2.0-flash</span>
+                            </button>
+                            <button class="provider-btn" data-provider="openai">
+                                <span class="provider-icon">🟢</span>
+                                <span class="provider-name">ChatGPT</span>
+                                <span class="provider-model">gpt-4o-mini</span>
+                            </button>
+                            <button class="provider-btn" data-provider="anthropic">
+                                <span class="provider-icon">🟠</span>
+                                <span class="provider-name">Claude</span>
+                                <span class="provider-model">claude-3.5-sonnet</span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="config-ai-provider" value="gemini">
+                    </div>
+
+                    <!-- API Key -->
+                    <div class="config-section">
+                        <span class="config-section-label" id="config-api-key-label">API KEY DO GEMINI</span>
+                        <div class="config-apikey-row">
+                            <input type="password" id="config-ai-key" class="modal-input config-apikey-input" placeholder="Cole sua API Key aqui">
+                            <button class="config-apikey-toggle" id="config-apikey-toggle" title="Mostrar/Ocultar">👁️</button>
+                            <span class="config-key-status" id="config-key-status"></span>
+                        </div>
+                        <span class="form-hint" id="config-api-key-hint">Gere gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--primary-color);">aistudio.google.com/apikey</a></span>
+                    </div>
+                </div>
+
+                <!-- ===== ABA 4: Sobre ===== -->
+                <div class="config-tab-panel" id="config-panel-sobre">
+                    <!-- Identidade do app -->
+                    <div class="config-about-identity">
+                        <div class="config-about-logo">
+                            <img src="Icone.png" alt="VS&A" class="config-about-logo-img">
+                        </div>
+                        <div class="config-about-info">
+                            <span class="config-about-app-name">VS&A — Visão, Solidez & Autonomia</span>
+                            <span class="config-about-version" id="config-app-version">v1.2.0</span>
+                        </div>
+                    </div>
+
+                    <!-- Changelog -->
+                    <button class="config-changelog-btn" id="btn-toggle-changelog">
+                        📋 Ver novidades desta versão
+                    </button>
+                    <div id="changelog-content" class="changelog-content hidden">
+                        <div class="changelog-body" id="changelog-body">
+                            Carregando changelog...
+                        </div>
+                    </div>
+
+                    <!-- Tech footer -->
+                    <div class="config-about-tech" id="config-about-tech">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Fixed Footer -->
+            <div class="config-modal-footer">
                 <button class="btn-outline btn-sm" id="btn-cancel-config">Cancelar</button>
-                <button class="btn-primary btn-sm" id="btn-save-config">💾 Salvar Configurações</button>
+                <button class="btn-primary btn-sm config-save-btn" id="btn-save-config">
+                    💾 Salvar Configurações
+                </button>
             </div>
         </div>
     </div>
@@ -834,12 +971,27 @@
             </section>
 
         </main>
+
+        <!-- Version Footer -->
+        <footer class="app-version-footer" id="app-version-footer">
+            <span id="footer-version-text">VS&A v1.0.1</span>
+        </footer>
     </div>
 
     <!-- Modal: Registrar Venda para IR -->
     <div id="ir-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 520px;">
-            <h3>📋 Registrar Operação</h3>
+            <!-- Titlebar (Design System) -->
+            <div class="modal-titlebar">
+                <div class="modal-titlebar-left">
+                    <div class="modal-traffic-lights">
+                        <span class="modal-dot modal-dot-red" data-modal-close="ir-modal" title="Fechar"></span>
+                        <span class="modal-dot modal-dot-yellow"></span>
+                        <span class="modal-dot modal-dot-green"></span>
+                    </div>
+                    <span class="modal-titlebar-text">📋 Registrar Operação</span>
+                </div>
+            </div>
             <div class="modal-body">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="form-group">

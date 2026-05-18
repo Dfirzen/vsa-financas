@@ -8,20 +8,38 @@ document.addEventListener('DOMContentLoaded', () => {
     if (savedTheme === 'light') {
         document.body.classList.add('light-mode');
         if (themeIcon) themeIcon.textContent = '🌙';
+    } else if (savedTheme === 'system') {
+        // System theme — check OS preference via API
+        if (window.api && window.api.getSystemTheme) {
+            window.api.setThemeSource('system');
+            window.api.getSystemTheme().then(sysTheme => {
+                if (sysTheme === 'light') {
+                    document.body.classList.add('light-mode');
+                    if (themeIcon) themeIcon.textContent = '🌙';
+                } else {
+                    document.body.classList.remove('light-mode');
+                    if (themeIcon) themeIcon.textContent = '☀️';
+                }
+            });
+        } else {
+            if (themeIcon) themeIcon.textContent = '☀️';
+        }
     } else {
         if (themeIcon) themeIcon.textContent = '☀️';
     }
 
+    // Header toggle button — simple dark/light cycle
     if (btnThemeToggle) {
         btnThemeToggle.addEventListener('click', () => {
-            document.body.classList.toggle('light-mode');
             const isLight = document.body.classList.contains('light-mode');
-            if (isLight) {
-                localStorage.setItem('theme', 'light');
-                themeIcon.textContent = '🌙';
+            const newTheme = isLight ? 'dark' : 'light';
+            // Use applyTheme if available (defined later), otherwise inline
+            if (typeof applyTheme === 'function') {
+                applyTheme(newTheme);
             } else {
-                localStorage.setItem('theme', 'dark');
-                themeIcon.textContent = '☀️';
+                document.body.classList.toggle('light-mode');
+                localStorage.setItem('theme', newTheme);
+                if (themeIcon) themeIcon.textContent = isLight ? '☀️' : '🌙';
             }
             
             // Re-renderizar gráficos para aplicar nova paleta de cor dinâmica (ex: datalabels)
@@ -29,7 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newGridColor = getChartGridColor();
                 Object.values(charts).forEach(chart => {
                     if (chart && typeof chart.update === 'function') {
-                        // Atualiza cor do grid em todos os eixos Y
                         if (chart.options && chart.options.scales && chart.options.scales.y) {
                             if (chart.options.scales.y.grid) {
                                 chart.options.scales.y.grid.color = newGridColor;
@@ -2238,7 +2255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // CONFIGURAÇÕES MODAL
+    // CONFIGURAÇÕES MODAL (Tabbed Redesign)
     // ==========================================
     const configModal = document.getElementById('config-modal');
     const btnOpenConfig = document.getElementById('btn-open-config');
@@ -2248,22 +2265,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const configApiKeyLabel = document.getElementById('config-api-key-label');
     const configApiKeyHint = document.getElementById('config-api-key-hint');
     const configKeyStatus = document.getElementById('config-key-status');
-    const configModalTitle = document.getElementById('config-modal-title');
-    const configModalDesc = document.getElementById('config-modal-desc');
 
     let isFirstRun = false;
 
+    // --- Toast utility ---
+    function showConfigToast(message) {
+        let toast = document.querySelector('.config-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.className = 'config-toast';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        // Force reflow for re-trigger
+        toast.classList.remove('visible');
+        void toast.offsetWidth;
+        toast.classList.add('visible');
+        setTimeout(() => { toast.classList.remove('visible'); }, 2500);
+    }
+
+    // --- Tab Navigation ---
+    const configTabBtns = document.querySelectorAll('.config-tab-btn');
+    const configTabPanels = document.querySelectorAll('.config-tab-panel');
+
+    configTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-config-tab');
+            configTabBtns.forEach(b => b.classList.remove('active'));
+            configTabPanels.forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            const panel = document.getElementById('config-panel-' + tabId);
+            if (panel) panel.classList.add('active');
+        });
+    });
+
+    // --- Provider Info ---
     const providerInfo = {
         gemini: {
-            label: '🔑 API Key do Gemini',
+            label: 'API KEY DO GEMINI',
             hint: 'Gere gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--primary-color);">aistudio.google.com/apikey</a>'
         },
         openai: {
-            label: '🔑 API Key da OpenAI',
+            label: 'API KEY DA OPENAI',
             hint: 'Crie em <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--primary-color);">platform.openai.com/api-keys</a>'
         },
         anthropic: {
-            label: '🔑 API Key da Anthropic',
+            label: 'API KEY DA ANTHROPIC',
             hint: 'Crie em <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color: var(--primary-color);">console.anthropic.com/settings/keys</a>'
         }
     };
@@ -2283,51 +2330,207 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // --- API Key Toggle (show/hide) ---
+    const apiKeyToggle = document.getElementById('config-apikey-toggle');
+    const apiKeyInput = document.getElementById('config-ai-key');
+    if (apiKeyToggle && apiKeyInput) {
+        apiKeyToggle.addEventListener('click', () => {
+            const isPassword = apiKeyInput.type === 'password';
+            apiKeyInput.type = isPassword ? 'text' : 'password';
+            apiKeyToggle.textContent = isPassword ? '🔒' : '👁️';
+        });
+    }
+
+    // --- Theme Cards (immediate apply) ---
+    function applyTheme(theme) {
+        const themeIcon = document.getElementById('theme-icon');
+        if (theme === 'light') {
+            document.body.classList.add('light-mode');
+            localStorage.setItem('theme', 'light');
+            if (themeIcon) themeIcon.textContent = '🌙';
+            if (window.api && window.api.setThemeSource) window.api.setThemeSource('light');
+        } else if (theme === 'dark') {
+            document.body.classList.remove('light-mode');
+            localStorage.setItem('theme', 'dark');
+            if (themeIcon) themeIcon.textContent = '☀️';
+            if (window.api && window.api.setThemeSource) window.api.setThemeSource('dark');
+        } else if (theme === 'system') {
+            localStorage.setItem('theme', 'system');
+            if (window.api && window.api.setThemeSource) {
+                window.api.setThemeSource('system');
+                // Apply based on current system preference
+                window.api.getSystemTheme().then(sysTheme => {
+                    if (sysTheme === 'light') {
+                        document.body.classList.add('light-mode');
+                        if (themeIcon) themeIcon.textContent = '🌙';
+                    } else {
+                        document.body.classList.remove('light-mode');
+                        if (themeIcon) themeIcon.textContent = '☀️';
+                    }
+                });
+            }
+        }
+
+        // Update theme card selection
+        document.querySelectorAll('.config-theme-card').forEach(card => {
+            card.classList.toggle('active', card.getAttribute('data-theme') === theme);
+        });
+
+        // Re-render charts for new theme palette
+        if (typeof charts !== 'undefined') {
+            const newGridColor = getChartGridColor();
+            Object.values(charts).forEach(chart => {
+                if (chart && typeof chart.update === 'function') {
+                    if (chart.options && chart.options.scales && chart.options.scales.y) {
+                        if (chart.options.scales.y.grid) {
+                            chart.options.scales.y.grid.color = newGridColor;
+                        }
+                    }
+                    chart.update();
+                }
+            });
+        }
+    }
+
+    document.querySelectorAll('.config-theme-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const theme = card.getAttribute('data-theme');
+            applyTheme(theme);
+        });
+    });
+
+    // Initialize theme card state on load
+    function syncThemeCards() {
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.querySelectorAll('.config-theme-card').forEach(card => {
+            card.classList.toggle('active', card.getAttribute('data-theme') === savedTheme);
+        });
+    }
+
+    // --- Sync Card ---
+    function updateSyncStatus() {
+        const syncDate = document.getElementById('config-sync-date');
+        const syncStatus = document.getElementById('config-sync-status');
+        const lastSync = localStorage.getItem('lastSync');
+
+        if (lastSync) {
+            const date = new Date(lastSync);
+            syncDate.textContent = date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const hoursSince = (Date.now() - date.getTime()) / (1000 * 60 * 60);
+            if (hoursSince < 24) {
+                syncStatus.textContent = '✅ Sincronizado';
+                syncStatus.className = 'config-sync-status synced';
+            } else {
+                syncStatus.textContent = '⚠️ Desatualizado';
+                syncStatus.className = 'config-sync-status outdated';
+            }
+        } else {
+            syncDate.textContent = 'Nunca sincronizado';
+            syncStatus.textContent = '—';
+            syncStatus.className = 'config-sync-status';
+        }
+    }
+
+    const btnConfigSync = document.getElementById('btn-config-sync');
+    if (btnConfigSync) {
+        btnConfigSync.addEventListener('click', async () => {
+            if (!window.b3Data || window.b3Data.length < 2) {
+                showConfigToast('Nenhum extrato importado para sincronizar.');
+                return;
+            }
+            const originalText = btnConfigSync.textContent;
+            btnConfigSync.textContent = '⏳ Sincronizando...';
+            btnConfigSync.disabled = true;
+            try {
+                await renderDashboards(true);
+                localStorage.setItem('lastSync', new Date().toISOString());
+                updateSyncStatus();
+                showConfigToast('Cotações atualizadas com sucesso!');
+            } catch(e) {
+                showConfigToast('Erro ao sincronizar.');
+            } finally {
+                btnConfigSync.textContent = originalText;
+                btnConfigSync.disabled = false;
+            }
+        });
+    }
+
+    // --- About Tab: Tech Info ---
+    function populateAboutTech() {
+        const techDiv = document.getElementById('config-about-tech');
+        if (!techDiv) return;
+        const electronVersion = (typeof process !== 'undefined' && process.versions) ? process.versions.electron || '—' : '—';
+        const nodeVersion = (typeof process !== 'undefined' && process.versions) ? process.versions.node || '—' : '—';
+        const platform = navigator.platform || '—';
+        techDiv.innerHTML = `
+            <span>Electron: v${electronVersion}</span>
+            <span>Node.js: v${nodeVersion}</span>
+            <span>Sistema: ${platform}</span>
+        `;
+    }
+
+    // --- Open Config Modal ---
     function openConfigModal(firstRun = false) {
         isFirstRun = firstRun;
         if (firstRun) {
-            configModalTitle.textContent = '👋 Bem-vindo ao InvestAI!';
-            configModalDesc.textContent = 'Configure seu aplicativo para começar a usar.';
             btnCancelConfig.style.display = 'none';
         } else {
-            configModalTitle.textContent = '⚙️ Configurações';
-            configModalDesc.textContent = 'Altere suas preferências a qualquer momento.';
             btnCancelConfig.style.display = '';
         }
         configKeyStatus.textContent = '';
+
+        // Always reset to Perfil tab
+        configTabBtns.forEach(b => b.classList.remove('active'));
+        configTabPanels.forEach(p => p.classList.remove('active'));
+        const firstTab = document.querySelector('[data-config-tab="perfil"]');
+        const firstPanel = document.getElementById('config-panel-perfil');
+        if (firstTab) firstTab.classList.add('active');
+        if (firstPanel) firstPanel.classList.add('active');
+
+        // Sync UI state
+        syncThemeCards();
+        updateSyncStatus();
+        populateAboutTech();
+
+        // Reset API key toggle state
+        if (apiKeyInput) apiKeyInput.type = 'password';
+        if (apiKeyToggle) apiKeyToggle.textContent = '👁️';
+
         configModal.classList.remove('hidden');
     }
 
-    // Load config on startup
+    // --- Load config on startup ---
     async function loadConfig() {
         try {
             const cfg = await window.api.getConfig();
-            
+
             if (!cfg.is_configured) {
-                // First time — force modal open
                 openConfigModal(true);
                 return;
             }
-            
-            // Pre-fill form
+
+            // Pre-fill form fields
             document.getElementById('config-user-name').value = cfg.user_name || '';
             document.getElementById('config-excel-path').value = cfg.excel_path || '';
             configProviderInput.value = cfg.ai_provider || 'gemini';
-            
+
             // Select the right provider button
             document.querySelectorAll('.provider-btn').forEach(b => {
                 b.classList.toggle('active', b.getAttribute('data-provider') === cfg.ai_provider);
             });
-            
+
             // Update key label/hint for selected provider
             const info = providerInfo[cfg.ai_provider] || providerInfo.gemini;
             if (configApiKeyLabel) configApiKeyLabel.textContent = info.label;
             if (configApiKeyHint) configApiKeyHint.innerHTML = info.hint;
-            
+
             // Show masked key status
             if (cfg.ai_api_key_masked) {
-                configKeyStatus.textContent = `✅ Chave configurada: ${cfg.ai_api_key_masked}`;
+                configKeyStatus.textContent = '✅ Válida';
                 configKeyStatus.className = 'config-key-status success';
+            } else {
+                configKeyStatus.textContent = 'Não configurada';
+                configKeyStatus.className = 'config-key-status unconfigured';
             }
         } catch(e) {
             console.error('Error loading config:', e);
@@ -2378,7 +2581,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            btnSaveConfig.textContent = '⏳ Salvando...';
+            btnSaveConfig.innerHTML = '⏳ Salvando...';
             btnSaveConfig.disabled = true;
 
             try {
@@ -2386,7 +2589,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (data.status === 'success') {
                     configModal.classList.add('hidden');
-                    
+                    showConfigToast('Configurações salvas!');
+
                     // Reload extrato if path was filled
                     if (excelPath) {
                         loadLocalExtrato();
@@ -2409,17 +2613,68 @@ document.addEventListener('DOMContentLoaded', () => {
                 configKeyStatus.textContent = '❌ Erro de conexão.';
                 configKeyStatus.className = 'config-key-status error';
             } finally {
-                btnSaveConfig.textContent = '💾 Salvar Configurações';
+                btnSaveConfig.innerHTML = '💾 Salvar Configurações';
                 btnSaveConfig.disabled = false;
             }
         });
     }
 
-    // Prevent closing config modal by clicking outside on first run
-    if (configModal) {
-        configModal.addEventListener('click', (e) => {
-            if (e.target === configModal && !isFirstRun) {
-                configModal.classList.add('hidden');
+    // Note: Modal closing is now handled globally via the Design System handlers
+
+    // ==========================================
+    // VERSÃO DO APP (dinâmica via IPC)
+    // ==========================================
+    async function loadAppVersion() {
+        try {
+            const version = await window.api.getAppVersion();
+            if (version) {
+                // Atualiza o rodapé global
+                const footerEl = document.getElementById('footer-version-text');
+                if (footerEl) footerEl.textContent = `VS&A v${version}`;
+
+                // Atualiza a seção "Sobre" nas configurações
+                const configVersionEl = document.getElementById('config-app-version');
+                if (configVersionEl) configVersionEl.textContent = `v${version}`;
+            }
+        } catch (e) {
+            console.error('Erro ao obter versão do app:', e);
+        }
+    }
+
+    loadAppVersion();
+
+    // Changelog toggle
+    const btnToggleChangelog = document.getElementById('btn-toggle-changelog');
+    const changelogContentDiv = document.getElementById('changelog-content');
+    const changelogBodyDiv = document.getElementById('changelog-body');
+    let changelogLoaded = false;
+
+    if (btnToggleChangelog && changelogContentDiv) {
+        btnToggleChangelog.addEventListener('click', async () => {
+            const isHidden = changelogContentDiv.classList.contains('hidden');
+
+            if (isHidden) {
+                changelogContentDiv.classList.remove('hidden');
+                btnToggleChangelog.textContent = '📋 Ocultar changelog';
+
+                // Carrega o changelog apenas na primeira vez
+                if (!changelogLoaded) {
+                    try {
+                        const md = await window.api.readChangelog();
+                        if (typeof marked !== 'undefined' && marked.parse) {
+                            changelogBodyDiv.innerHTML = marked.parse(md);
+                        } else {
+                            // Fallback: renderiza como texto pré-formatado
+                            changelogBodyDiv.innerHTML = `<pre style="white-space: pre-wrap;">${md}</pre>`;
+                        }
+                        changelogLoaded = true;
+                    } catch (e) {
+                        changelogBodyDiv.textContent = 'Erro ao carregar changelog.';
+                    }
+                }
+            } else {
+                changelogContentDiv.classList.add('hidden');
+                btnToggleChangelog.textContent = '📋 Ver novidades desta versão';
             }
         });
     }
@@ -3318,10 +3573,44 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('raiox-overlay')?.addEventListener('click', (e) => {
         if (e.target.id === 'raiox-overlay') closeRaioXModal();
     });
+
+    // ==========================================
+    // DESIGN SYSTEM: Global modal close handlers
+    // ==========================================
+    // Traffic light red dots — close via data-modal-close attribute
+    document.querySelectorAll('[data-modal-close]').forEach(dot => {
+        dot.addEventListener('click', () => {
+            const modalId = dot.getAttribute('data-modal-close');
+            const modal = document.getElementById(modalId);
+            if (modal) modal.classList.add('hidden');
+        });
+    });
+
+    // Click outside modal-content to close (for all .modal-overlay)
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                // Don't close config modal on first run
+                if (overlay.id === 'config-modal' && isFirstRun) return;
+                overlay.classList.add('hidden');
+            }
+        });
+    });
+
+    // Escape key — close any visible modal
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            const overlay = document.getElementById('raiox-overlay');
-            if (overlay && !overlay.classList.contains('hidden')) closeRaioXModal();
+            // Close Raio-X first
+            const raiox = document.getElementById('raiox-overlay');
+            if (raiox && !raiox.classList.contains('hidden')) {
+                closeRaioXModal();
+                return;
+            }
+            // Close any standard modal
+            document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => {
+                if (m.id === 'config-modal' && isFirstRun) return;
+                m.classList.add('hidden');
+            });
         }
     });
 

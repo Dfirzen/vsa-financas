@@ -43,6 +43,14 @@ contextBridge.exposeInMainWorld('api', {
     renameConversation: (id, title) => ipcRenderer.invoke('rename-conversation', id, title),
 
     // Native dialogs
-    selectFile: (options) => ipcRenderer.invoke('select-file', options)
+    selectFile: (options) => ipcRenderer.invoke('select-file', options),
+
+    // Version & Changelog
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    readChangelog: () => ipcRenderer.invoke('read-changelog'),
+
+    // Theme (nativeTheme)
+    setThemeSource: (source) => ipcRenderer.invoke('set-theme-source', source),
+    getSystemTheme: () => ipcRenderer.invoke('get-system-theme')
 });
 

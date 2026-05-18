@@ -2,8 +2,9 @@
  * Electron Main Process
  * Creates the native desktop window and initializes all backend services.
  */
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { registerIpcHandlers } = require('./src/ipc-handlers');
 
 // Prevent multiple instances
@@ -52,6 +53,34 @@ function createWindow() {
 // Register IPC handlers before window creation
 app.whenReady().then(() => {
     registerIpcHandlers();
+
+    // --- Version & Changelog IPC ---
+    ipcMain.handle('get-app-version', () => {
+        return app.getVersion();
+    });
+
+    ipcMain.handle('read-changelog', () => {
+        try {
+            const changelogPath = path.join(__dirname, 'CHANGELOG.md');
+            if (fs.existsSync(changelogPath)) {
+                return fs.readFileSync(changelogPath, 'utf-8');
+            }
+            return '# Changelog\n\nNenhum changelog disponível.';
+        } catch (e) {
+            return '# Changelog\n\nErro ao ler changelog.';
+        }
+    });
+
+    // --- Theme Source IPC (nativeTheme) ---
+    ipcMain.handle('set-theme-source', (_, source) => {
+        nativeTheme.themeSource = source; // 'light', 'dark', 'system'
+        return nativeTheme.shouldUseDarkColors;
+    });
+
+    ipcMain.handle('get-system-theme', () => {
+        return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    });
+
     createWindow();
 });
 
