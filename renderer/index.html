@@ -573,7 +573,124 @@
                 </div>
             </section>
             <section id="patrimonio" class="screen">
-                <h2>Patrimônio (Em Breve)</h2>
+                <div class="dashboard-grid">
+
+                    <!-- SEÇÃO 1 — KPIs (4 colunas) -->
+                    <div class="summary-cards-row">
+                        <!-- Card 1: Total investido -->
+                        <div class="card pat-kpi-card">
+                            <div class="pat-kpi-header">
+                                <span class="pat-kpi-icon pat-kpi-icon-wallet">💰</span>
+                                <span class="pat-kpi-label">Total investido</span>
+                            </div>
+                            <span class="kpi-value" id="pat-kpi-investido">R$ 0,00</span>
+                            <span class="pat-kpi-subtitle">do seu bolso</span>
+                        </div>
+
+                        <!-- Card 2: Patrimônio atual -->
+                        <div class="card pat-kpi-card">
+                            <div class="pat-kpi-header">
+                                <span class="pat-kpi-icon pat-kpi-icon-bank">🏦</span>
+                                <span class="pat-kpi-label">Patrimônio atual</span>
+                            </div>
+                            <span class="kpi-value" id="pat-kpi-patrimonio" style="color: var(--color-accent);">R$ 0,00</span>
+                            <span class="pat-kpi-subtitle">valor de mercado hoje</span>
+                        </div>
+
+                        <!-- Card 3: Ganho do mercado -->
+                        <div class="card pat-kpi-card">
+                            <div class="pat-kpi-header">
+                                <span class="pat-kpi-icon pat-kpi-icon-trend">📈</span>
+                                <span class="pat-kpi-label">Ganho do mercado</span>
+                            </div>
+                            <span class="kpi-value" id="pat-kpi-ganho">R$ 0,00</span>
+                            <span class="pat-kpi-subtitle">além do que você aportou</span>
+                        </div>
+
+                        <!-- Card 4: Patrimônio médio mensal -->
+                        <div class="card pat-kpi-card">
+                            <div class="pat-kpi-header">
+                                <span class="pat-kpi-icon pat-kpi-icon-calendar">📊</span>
+                                <span class="pat-kpi-label">Patrimônio médio</span>
+                            </div>
+                            <span class="kpi-value" id="pat-kpi-medio">R$ 0,00</span>
+                            <span class="pat-kpi-subtitle">média dos últimos 12 meses</span>
+                        </div>
+                    </div>
+
+                    <!-- SEÇÃO 2 — Evolução do patrimônio -->
+                    <div class="card pat-evolution-card">
+                        <div class="card-header">
+                            <h3>Evolução do Patrimônio</h3>
+                            <div class="filter-group">
+                                <select class="select-sm" id="pat-evol-period">
+                                    <option value="all">Desde o início</option>
+                                    <option value="12">12 meses</option>
+                                    <option value="6">6 meses</option>
+                                </select>
+                                <select class="select-sm" id="pat-evol-class">
+                                    <option value="Todos">Todos os tipos</option>
+                                    <option value="FIIs">FIIs</option>
+                                    <option value="Ações">Ações</option>
+                                    <option value="ETFs">ETFs</option>
+                                    <option value="Tesouro Direto">Tesouro</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="pat-legend">
+                            <span class="pat-legend-item"><span class="pat-legend-dot" style="background: var(--color-accent);"></span> Patrimônio total</span>
+                            <span class="pat-legend-item"><span class="pat-legend-dot" style="background: #6B7280;"></span> Total aportado</span>
+                            <span class="pat-legend-item"><span class="pat-legend-dot" style="background: var(--color-positive);"></span> Ganho do mercado</span>
+                        </div>
+                        <div class="chart-container-large">
+                            <canvas id="patEvolutionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- SEÇÃO 3 — Duas colunas -->
+                    <div class="pat-two-col">
+                        <!-- Coluna esquerda: Composição por classe -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Composição por Classe</h3>
+                            </div>
+                            <table class="pat-class-table" id="pat-class-table">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Classe</th>
+                                        <th>Valor</th>
+                                        <th>%</th>
+                                        <th>Variação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pat-class-tbody">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Coluna direita: Histórico de aportes -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Histórico de Aportes</h3>
+                            </div>
+                            <div class="chart-container-large">
+                                <canvas id="patAportesChart"></canvas>
+                            </div>
+                            <div class="pat-totals-row" id="pat-aportes-totals">
+                                <!-- Populated via JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SEÇÃO 4 — Alerta de concentração (condicional) -->
+                    <div class="pat-alert hidden" id="pat-concentration-alert">
+                        <span class="pat-alert-icon">⚠️</span>
+                        <span class="pat-alert-text" id="pat-alert-text"></span>
+                    </div>
+
+                </div>
             </section>
             <section id="rentabilidade" class="screen">
                 <div class="rentab-layout">

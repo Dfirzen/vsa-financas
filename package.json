@@ -1,12 +1,14 @@
 {
   "name": "investai-desktop",
-  "version": "1.0.1",
+  "version": "1.2.2",
   "description": "InvestAI - Dashboard de Investimentos Desktop",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "prebuild": "npx rimraf dist-electron",
-    "build": "electron-builder"
+    "build": "node scripts/bump-version.js && electron-builder",
+    "build:minor": "node scripts/bump-version.js minor && electron-builder",
+    "build:major": "node scripts/bump-version.js major && electron-builder"
   },
   "author": "Diego",
   "license": "MIT",
@@ -24,7 +26,8 @@
   },
   "build": {
     "appId": "com.investai.desktop",
-    "productName": "InvestAI",
+    "productName": "VSA",
+    "artifactName": "VSA-v${version}-setup.${ext}",
     "directories": {
       "output": "dist-electron"
     },
@@ -37,7 +40,8 @@
       "preload.js",
       "src/**/*",
       "renderer/**/*",
-      "Icone.png"
+      "Icone.png",
+      "CHANGELOG.md"
     ]
   }
 }

@@ -94,10 +94,21 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    // ==== CORES POR CLASSE (compartilhado entre donut + patrimônio) ====
+    const CLASS_COLORS = {
+        'FIIs': '#3B82F6',
+        'Ações': '#6366F1',
+        'ETFs': '#8B5CF6',
+        'Tesouro Direto': '#10B981'
+    };
+    const CLASS_COLORS_ARRAY = Object.values(CLASS_COLORS);
+
     // ==== ESTADO DOS GRÁFICOS ====
     let charts = {
         evolution: null,
-        allocation: null
+        allocation: null,
+        patEvolution: null,
+        patAportes: null
     };
 
     if (typeof Chart !== 'undefined') {
@@ -552,6 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateFilteredCharts();
         renderProventosScreen();
         renderRentabilidadeScreen();
+        renderPatrimonioScreen();
 
         renderAssetsAccordion(categories, currentPatrimonioReal);
 
@@ -621,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     allocData.push(categories[c].total);
                 }
             });
-            allocBgColors = ['#3B82F6', '#6366F1', '#8B5CF6', '#10B981'].slice(0, allocData.length);
+            allocBgColors = Object.keys(categories).filter(c => categories[c].total > 0).map(c => CLASS_COLORS[c] || '#6B7280');
         } else {
             const cat = categories[allocFilterVal];
             if (cat) {
@@ -2677,6 +2689,313 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnToggleChangelog.textContent = '📋 Ver novidades desta versão';
             }
         });
+    }
+
+    // ==========================================
+    // PATRIMÔNIO SCREEN
+    // ==========================================
+    function renderPatrimonioScreen() {
+        if (!window.dashboardState) return;
+        const { categories, monthlyInvestments, investTransactions } = window.dashboardState;
+
+        const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        // ---- KPIs ----
+        let totalInvestido = 0;
+        let patrimonioAtual = 0;
+        const classNames = Object.keys(categories);
+
+        classNames.forEach(cat => {
+            totalInvestido += (categories[cat].investedTotal || categories[cat].total);
+            patrimonioAtual += categories[cat].total;
+        });
+
+        const ganhoMercado = patrimonioAtual - totalInvestido;
+
+        document.getElementById('pat-kpi-investido').textContent = fmtBRL(totalInvestido);
+        document.getElementById('pat-kpi-patrimonio').textContent = fmtBRL(patrimonioAtual);
+
+        const ganhoEl = document.getElementById('pat-kpi-ganho');
+        ganhoEl.textContent = fmtBRL(ganhoMercado);
+        ganhoEl.style.color = ganhoMercado >= 0 ? 'var(--color-positive)' : 'var(--color-negative)';
+
+        // Patrimônio médio — approximation based on cumulative monthly investments
+        const sortedMonthKeys = Object.keys(monthlyInvestments).sort();
+        let cumulativeInvested = 0;
+        const monthlyPatValues = [];
+        sortedMonthKeys.forEach(k => {
+            cumulativeInvested += monthlyInvestments[k].total;
+            monthlyPatValues.push(cumulativeInvested);
+        });
+        // For the last month, use actual patrimonio (includes market gains)
+        if (monthlyPatValues.length > 0) {
+            monthlyPatValues[monthlyPatValues.length - 1] = patrimonioAtual;
+        }
+        const last12 = monthlyPatValues.slice(-12);
+        const patMedio = last12.length > 0 ? last12.reduce((a, b) => a + b, 0) / last12.length : 0;
+        document.getElementById('pat-kpi-medio').textContent = fmtBRL(patMedio);
+
+        // ---- Evolution Chart ----
+        updatePatEvolutionChart();
+
+        // ---- Composition Table ----
+        const tbody = document.getElementById('pat-class-tbody');
+        tbody.innerHTML = '';
+        classNames.forEach(cat => {
+            const catData = categories[cat];
+            const invested = catData.investedTotal || catData.total;
+            const current = catData.total;
+            const pct = patrimonioAtual > 0 ? (current / patrimonioAtual * 100) : 0;
+            const variation = invested > 0 ? ((current - invested) / invested * 100) : 0;
+            const isEmpty = current === 0;
+            const color = CLASS_COLORS[cat] || '#6B7280';
+
+            const tr = document.createElement('tr');
+            tr.className = 'pat-class-row' + (isEmpty ? ' empty' : '');
+            tr.innerHTML = `
+                <td><span class="pat-class-color" style="background: ${color};"></span></td>
+                <td class="pat-class-name">${cat}</td>
+                <td>${fmtBRL(current)}</td>
+                <td>${pct.toFixed(1)}%</td>
+                <td class="pat-class-var ${variation >= 0 ? 'positive' : 'negative'}">
+                    ${variation >= 0 ? '+' : ''}${variation.toFixed(1)}%
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // ---- Aportes Chart ----
+        updatePatAportesChart();
+
+        // ---- Concentration Alert ----
+        const alertEl = document.getElementById('pat-concentration-alert');
+        const alertTextEl = document.getElementById('pat-alert-text');
+        let alertShown = false;
+
+        if (patrimonioAtual > 0) {
+            classNames.forEach(cat => {
+                const pct = categories[cat].total / patrimonioAtual * 100;
+                if (pct > 80) {
+                    alertTextEl.textContent = `${cat} representa ${pct.toFixed(0)}% da carteira. Considere diversificar em outras classes para reduzir o risco.`;
+                    alertShown = true;
+                }
+            });
+        }
+        alertEl.classList.toggle('hidden', !alertShown);
+    }
+
+    function updatePatEvolutionChart() {
+        if (!window.dashboardState) return;
+        const { monthlyInvestments } = window.dashboardState;
+
+        const periodFilter = document.getElementById('pat-evol-period')?.value || 'all';
+        const classFilter = document.getElementById('pat-evol-class')?.value || 'Todos';
+
+        const allKeys = Object.keys(monthlyInvestments).sort();
+        let filteredKeys = allKeys;
+
+        if (periodFilter !== 'all') {
+            const n = parseInt(periodFilter);
+            filteredKeys = allKeys.slice(-n);
+        }
+
+        const labels = [];
+        const aportadoAcum = [];
+        const patrimonioData = [];
+        let cumInvested = 0;
+
+        // Calculate cumulative up to the filtered start
+        const startIdx = allKeys.indexOf(filteredKeys[0]);
+        for (let i = 0; i < startIdx; i++) {
+            const k = allKeys[i];
+            if (classFilter === 'Todos') {
+                cumInvested += monthlyInvestments[k].total;
+            } else {
+                cumInvested += (monthlyInvestments[k][classFilter] || 0);
+            }
+        }
+
+        filteredKeys.forEach((k, idx) => {
+            const monthData = monthlyInvestments[k];
+            labels.push(monthData.label);
+
+            const monthVal = classFilter === 'Todos'
+                ? monthData.total
+                : (monthData[classFilter] || 0);
+            cumInvested += monthVal;
+            aportadoAcum.push(cumInvested);
+
+            // For patrimônio we approximate with invested value
+            // On the last data point, use actual current market value for that class
+            if (idx === filteredKeys.length - 1 && window.dashboardState.categories) {
+                const cats = window.dashboardState.categories;
+                if (classFilter === 'Todos') {
+                    let total = 0;
+                    Object.keys(cats).forEach(c => { total += cats[c].total; });
+                    patrimonioData.push(total);
+                } else {
+                    patrimonioData.push(cats[classFilter] ? cats[classFilter].total : cumInvested);
+                }
+            } else {
+                // Historical approximation: invested + proportional market gain
+                const cats = window.dashboardState.categories;
+                let totalInvested = 0;
+                let totalCurrent = 0;
+                Object.keys(cats).forEach(c => {
+                    totalInvested += (cats[c].investedTotal || cats[c].total);
+                    totalCurrent += cats[c].total;
+                });
+                const ratio = totalInvested > 0 ? totalCurrent / totalInvested : 1;
+                patrimonioData.push(cumInvested * ratio);
+            }
+        });
+
+        const ctx = document.getElementById('patEvolutionChart');
+        if (!ctx) return;
+
+        if (charts.patEvolution) {
+            charts.patEvolution.destroy();
+            charts.patEvolution = null;
+        }
+
+        charts.patEvolution = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Total aportado',
+                        data: aportadoAcum,
+                        backgroundColor: '#6B7280',
+                        barThickness: 20,
+                        borderRadius: 3,
+                        order: 2
+                    },
+                    {
+                        label: 'Patrimônio total',
+                        data: patrimonioData,
+                        backgroundColor: '#3B82F6',
+                        barThickness: 20,
+                        borderRadius: 3,
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { maxRotation: 0, autoSkipPadding: 12 }
+                    },
+                    y: {
+                        grace: '10%',
+                        grid: { borderDash: [4, 4], color: getChartGridColor() },
+                        ticks: {
+                            callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v.toLocaleString('pt-BR')
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function updatePatAportesChart() {
+        if (!window.dashboardState) return;
+        const { monthlyInvestments } = window.dashboardState;
+
+        const sortedKeys = Object.keys(monthlyInvestments).sort();
+        const labels = [];
+        const data = [];
+        let totalAno = 0;
+        const currentYear = new Date().getFullYear().toString();
+
+        sortedKeys.forEach(k => {
+            const monthData = monthlyInvestments[k];
+            labels.push(monthData.label);
+            const val = Math.abs(monthData.total);
+            data.push(val);
+            // Sum only current year for totals
+            if (k.startsWith(currentYear)) {
+                totalAno += val;
+            }
+        });
+
+        const mediaMensal = data.length > 0 ? data.reduce((a, b) => a + b, 0) / data.length : 0;
+        const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        const totalsEl = document.getElementById('pat-aportes-totals');
+        if (totalsEl) {
+            totalsEl.innerHTML = `
+                <span>Total aportado no ano: <strong>${fmtBRL(totalAno)}</strong></span>
+                <span>Média mensal: <strong>${fmtBRL(mediaMensal)}</strong></span>
+            `;
+        }
+
+        const ctx = document.getElementById('patAportesChart');
+        if (!ctx) return;
+
+        if (charts.patAportes) {
+            charts.patAportes.destroy();
+            charts.patAportes = null;
+        }
+
+        charts.patAportes = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Aporte mensal',
+                    data: data,
+                    backgroundColor: '#10B981',
+                    borderRadius: 4,
+                    barThickness: 18
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => fmtBRL(ctx.parsed.y)
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { maxRotation: 0, autoSkipPadding: 12 }
+                    },
+                    y: {
+                        grace: '10%',
+                        grid: { borderDash: [4, 4], color: getChartGridColor() },
+                        ticks: {
+                            callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v.toLocaleString('pt-BR')
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Patrimônio filter listeners
+    if (!window.patFiltersAttached) {
+        document.getElementById('pat-evol-period')?.addEventListener('change', updatePatEvolutionChart);
+        document.getElementById('pat-evol-class')?.addEventListener('change', updatePatEvolutionChart);
+        window.patFiltersAttached = true;
     }
 
     // ==========================================

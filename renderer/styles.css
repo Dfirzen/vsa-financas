@@ -2303,6 +2303,215 @@ body.light-mode .config-toast {
     box-shadow: 0 8px 32px rgba(34, 197, 94, 0.25);
 }
 
+/* ==================
+   PATRIMÔNIO SCREEN
+   ================== */
+
+/* KPI Cards */
+.pat-kpi-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pat-kpi-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.pat-kpi-icon {
+    font-size: 1.2rem;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.pat-kpi-icon-wallet {
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.pat-kpi-icon-bank {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.pat-kpi-icon-trend {
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.pat-kpi-icon-calendar {
+    background: rgba(139, 92, 246, 0.12);
+}
+
+.pat-kpi-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.pat-kpi-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    margin-top: -2px;
+}
+
+/* Evolution Card */
+.pat-evolution-card {
+    width: 100%;
+}
+
+.pat-legend {
+    display: flex;
+    gap: 20px;
+    padding: 0 24px 8px;
+    margin-top: -4px;
+}
+
+.pat-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    font-weight: 500;
+}
+
+.pat-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* Two Column Layout */
+.pat-two-col {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 16px;
+}
+
+/* Composition Table */
+.pat-class-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+.pat-class-table th {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: var(--divider);
+}
+
+.pat-class-table th:nth-child(3),
+.pat-class-table th:nth-child(4),
+.pat-class-table th:nth-child(5) {
+    text-align: right;
+}
+
+.pat-class-table td {
+    font-size: 0.85rem;
+    padding: 12px;
+    border-bottom: var(--divider);
+    color: var(--text-primary);
+}
+
+.pat-class-table td:nth-child(3),
+.pat-class-table td:nth-child(4),
+.pat-class-table td:nth-child(5) {
+    text-align: right;
+    font-weight: 500;
+}
+
+.pat-class-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.pat-class-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.pat-class-row.empty {
+    opacity: 0.4;
+}
+
+.pat-class-color {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+.pat-class-name {
+    font-weight: 600;
+}
+
+.pat-class-var.positive {
+    color: var(--positive-color);
+}
+
+.pat-class-var.negative {
+    color: var(--negative-color);
+}
+
+/* Aportes Totals Row */
+.pat-totals-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 4px 0;
+    margin-top: 8px;
+    border-top: var(--divider);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.pat-totals-row span {
+    font-weight: 600;
+}
+
+.pat-totals-row strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+/* Concentration Alert */
+.pat-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-radius: var(--border-radius);
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+body.light-mode .pat-alert {
+    background: rgba(245, 158, 11, 0.06);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.pat-alert-icon {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.pat-alert-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
 /* AI Setup Banner */
 .ai-setup-banner {
     display: flex;
