@@ -51,6 +51,15 @@ contextBridge.exposeInMainWorld('api', {
 
     // Theme (nativeTheme)
     setThemeSource: (source) => ipcRenderer.invoke('set-theme-source', source),
-    getSystemTheme: () => ipcRenderer.invoke('get-system-theme')
+    getSystemTheme: () => ipcRenderer.invoke('get-system-theme'),
+
+    // Auto Updater
+    onUpdateAvailable: (callback) => ipcRenderer.on('updater:update-available', callback),
+    onDownloadProgress: (callback) => ipcRenderer.on('updater:download-progress', (event, percent) => callback(percent)),
+    onUpdateDownloaded: (callback) => ipcRenderer.on('updater:update-downloaded', callback),
+    onUpdateNotAvailable: (callback) => ipcRenderer.on('updater:update-not-available', callback),
+    onUpdaterError: (callback) => ipcRenderer.on('updater:error', (event, message) => callback(message)),
+    quitAndInstallUpdate: () => ipcRenderer.send('updater:quit-and-install'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check')
 });
 

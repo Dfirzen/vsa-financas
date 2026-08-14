@@ -1,24 +1,25 @@
 {
   "name": "investai-desktop",
-  "version": "1.2.2",
+  "version": "4.1.0",
   "description": "InvestAI - Dashboard de Investimentos Desktop",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "prebuild": "npx rimraf dist-electron",
-    "build": "node scripts/bump-version.js && electron-builder",
-    "build:minor": "node scripts/bump-version.js minor && electron-builder",
-    "build:major": "node scripts/bump-version.js major && electron-builder"
+    "build": "node scripts/bump-version.js && electron-builder --publish always",
+    "build:minor": "node scripts/bump-version.js minor && electron-builder --publish always",
+    "build:major": "node scripts/bump-version.js major && electron-builder --publish always"
   },
   "author": "Diego",
   "license": "MIT",
   "dependencies": {
-    "yahoo-finance2": "^2.14.0",
-    "@google/generative-ai": "^0.21.0",
-    "openai": "^4.78.0",
     "@anthropic-ai/sdk": "latest",
+    "@google/generative-ai": "^0.21.0",
+    "electron-updater": "^6.8.9",
+    "node-fetch": "^2.7.0",
+    "openai": "^4.78.0",
     "xlsx": "^0.18.5",
-    "node-fetch": "^2.7.0"
+    "yahoo-finance2": "^2.14.0"
   },
   "devDependencies": {
     "electron": "^33.3.1",
@@ -28,6 +29,12 @@
     "appId": "com.investai.desktop",
     "productName": "VSA",
     "artifactName": "VSA-v${version}-setup.${ext}",
+    "publish": {
+      "provider": "github",
+      "owner": "Dfirzen",
+      "repo": "vsa-financas",
+      "releaseType": "release"
+    },
     "directories": {
       "output": "dist-electron"
     },

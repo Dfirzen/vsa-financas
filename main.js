@@ -6,6 +6,50 @@ const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { registerIpcHandlers } = require('./src/ipc-handlers');
+const { autoUpdater } = require('electron-updater');
+
+function setupAutoUpdater(window) {
+    if (!app.isPackaged) return;
+
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    // Iniciar verificação 3 segundos após app abrir
+    setTimeout(() => {
+        autoUpdater.checkForUpdates().catch(err => console.error('Erro silencioso ao checar update:', err));
+    }, 3000);
+
+    // Verificar novamente a cada 4 horas
+    setInterval(() => {
+        autoUpdater.checkForUpdates().catch(err => console.error('Erro silencioso ao checar update:', err));
+    }, 4 * 60 * 60 * 1000);
+
+    // Eventos
+    autoUpdater.on('checking-for-update', () => {
+        console.log('Verificando atualizações...');
+    });
+
+    autoUpdater.on('update-available', (info) => {
+        window.webContents.send('updater:update-available', info);
+    });
+
+    autoUpdater.on('update-not-available', (info) => {
+        window.webContents.send('updater:update-not-available', info);
+    });
+
+    autoUpdater.on('error', (err) => {
+        console.error('Erro no autoUpdater:', err);
+        window.webContents.send('updater:error', err.message);
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+        window.webContents.send('updater:download-progress', progressObj.percent);
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+        window.webContents.send('updater:update-downloaded', info);
+    });
+}
 
 // Prevent multiple instances
 const gotLock = app.requestSingleInstanceLock();
@@ -42,6 +86,7 @@ function createWindow() {
     // Show window when content is ready (prevents white flash)
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
+        setupAutoUpdater(mainWindow);
     });
 
     // Handle window close
@@ -79,6 +124,20 @@ app.whenReady().then(() => {
 
     ipcMain.handle('get-system-theme', () => {
         return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    });
+
+    ipcMain.on('updater:quit-and-install', () => {
+        autoUpdater.quitAndInstall();
+    });
+
+    ipcMain.handle('updater:check', async () => {
+        try {
+            if (!app.isPackaged) return { error: 'Disponível apenas na versão final compilada.' };
+            await autoUpdater.checkForUpdates();
+            return { success: true };
+        } catch (err) {
+            return { error: err.message };
+        }
     });
 
     createWindow();

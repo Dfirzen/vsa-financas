@@ -228,6 +228,15 @@
                         </div>
                     </div>
 
+                    <!-- Atualizações -->
+                    <div class="config-section" style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
+                        <span class="config-section-label">ATUALIZAÇÕES</span>
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span class="form-hint" style="margin-top: 0;">O aplicativo verifica atualizações automaticamente, mas você pode forçar a checagem.</span>
+                            <button class="btn-outline btn-sm" id="btn-check-updates">🔄 Checar Agora</button>
+                        </div>
+                    </div>
+
                     <!-- Tech footer -->
                     <div class="config-about-tech" id="config-about-tech">
                         <!-- Populated via JS -->
@@ -290,6 +299,23 @@
                 </button>
             </div>
         </header>
+
+        <!-- Auto-Update Banner -->
+        <div id="update-banner" class="update-banner">
+            <div class="update-banner-content">
+                <span class="update-icon" id="update-icon">⬇️</span>
+                <div class="update-info">
+                    <span class="update-title" id="update-title">Nova versão disponível! Baixando atualização...</span>
+                    <div class="update-progress-track" id="update-progress-track">
+                        <div class="update-progress-fill" id="update-progress-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="update-actions">
+                <button class="btn-outline btn-sm" id="btn-update-dismiss">Dispensar</button>
+                <button class="btn-primary btn-sm hidden" id="btn-update-restart">Reiniciar agora</button>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -411,15 +437,61 @@
                         </div>
                     </div>
 
+                    <!-- Proactive Alert -->
+                    <div id="proactive-rights-alert" class="proactive-alert hidden">
+                        <div class="proactive-alert-content">
+                            <span class="proactive-icon">⚠️</span>
+                            <span id="proactive-rights-text">Você possui direito(s) de subscrição na carteira. Verifique os prazos de vencimento na sua corretora.</span>
+                        </div>
+                        <div class="proactive-alert-actions">
+                            <button class="btn-sm btn-outline proactive-scroll-btn" onclick="document.getElementById('assets-list-container').scrollIntoView({behavior: 'smooth', block: 'start'})">Ver detalhes</button>
+                            <button class="btn-sm btn-outline proactive-dismiss-btn" id="btn-dismiss-rights">Dispensar</button>
+                        </div>
+                    </div>
+
                     <!-- Assets Section -->
                     <div class="assets-section">
-                        <div class="assets-section-title">
-                            Meus Ativos <span class="assets-count-badge" id="total-assets-count">0</span>
+                        <div class="assets-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                            <div class="assets-section-title" style="margin-bottom: 0;">
+                                Meus Ativos <span class="assets-count-badge" id="total-assets-count">0</span>
+                            </div>
+                            <div class="segmented-control" id="assets-view-toggle">
+                                <button class="active" id="btn-view-categories">🗂️ Categorias</button>
+                                <button id="btn-view-construction">🎯 Foco na Construção</button>
+                            </div>
                         </div>
 
                         <div class="assets-list" id="assets-list-container">
                             <div style="text-align: center; color: var(--text-secondary); padding: 40px;">
                                 Nenhum ativo importado. Faça o upload do extrato B3 (Planilha Excel).
+                            </div>
+                        </div>
+
+                        <!-- Foco na Construção View -->
+                        <div class="construction-view-container hidden" id="construction-view-container">
+                            <!-- Card de Próxima Ação Sugerida -->
+                            <div id="suggested-action-card-wrapper">
+                                <!-- Populated dynamically -->
+                            </div>
+
+                            <!-- Abas de Filtros -->
+                            <div class="construction-tabs-row" style="margin: 24px 0 16px 0; border-bottom: 1px solid var(--border-color); display: flex;">
+                                <div class="construction-tabs" style="display: flex; gap: 8px;">
+                                    <button class="construction-tab-btn active" data-tab="prioridade" style="background: none; border: none; border-bottom: 2px solid var(--primary-color); color: var(--text-primary); padding: 8px 16px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 8px; position: relative; bottom: -1px;">
+                                        Prioridade <span class="construction-badge" id="badge-prioridade" style="background: rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;">0</span>
+                                    </button>
+                                    <button class="construction-tab-btn" data-tab="completos" style="background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 8px 16px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 8px; position: relative; bottom: -1px;">
+                                        Completos <span class="construction-badge" id="badge-completos" style="background: rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;">0</span>
+                                    </button>
+                                    <button class="construction-tab-btn" data-tab="todos" style="background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 8px 16px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 8px; position: relative; bottom: -1px;">
+                                        Todos <span class="construction-badge" id="badge-todos" style="background: rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;">0</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Lista de Cards dos Ativos -->
+                            <div class="construction-list" id="construction-list" style="display: flex; flex-direction: column; gap: 12px;">
+                                <!-- Populated dynamically -->
                             </div>
                         </div>
                     </div>

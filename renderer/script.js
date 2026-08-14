@@ -94,6 +94,82 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    // ==== ALTERNÂNCIA DE VISÃO: CATEGORIAS VS CONSTRUÇÃO ====
+    const btnViewCategories = document.getElementById('btn-view-categories');
+    const btnViewConstruction = document.getElementById('btn-view-construction');
+    const assetsListContainer = document.getElementById('assets-list-container');
+    const constructionViewContainer = document.getElementById('construction-view-container');
+
+    if (btnViewCategories && btnViewConstruction) {
+        btnViewCategories.addEventListener('click', () => {
+            btnViewCategories.classList.add('active');
+            btnViewConstruction.classList.remove('active');
+            assetsListContainer.classList.remove('hidden');
+            constructionViewContainer.classList.add('hidden');
+            localStorage.setItem('assetsView', 'categories');
+        });
+
+        btnViewConstruction.addEventListener('click', () => {
+            btnViewConstruction.classList.add('active');
+            btnViewCategories.classList.remove('active');
+            assetsListContainer.classList.add('hidden');
+            constructionViewContainer.classList.remove('hidden');
+            localStorage.setItem('assetsView', 'construction');
+            renderConstructionView();
+        });
+    }
+
+    // Abas internas da visualização Foco na Construção
+    window.currentConstructionTab = 'prioridade';
+    
+    function attachConstructionTabListeners() {
+        document.querySelectorAll('.construction-tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const clickedBtn = e.currentTarget;
+                document.querySelectorAll('.construction-tab-btn').forEach(b => {
+                    b.classList.remove('active');
+                    b.style.borderBottomColor = 'transparent';
+                    b.style.color = 'var(--text-secondary)';
+                });
+                clickedBtn.classList.add('active');
+                clickedBtn.style.borderBottomColor = 'var(--primary-color)';
+                clickedBtn.style.color = 'var(--text-primary)';
+                
+                const selectedTab = clickedBtn.getAttribute('data-tab');
+                window.currentConstructionTab = selectedTab;
+                
+                // Re-render list
+                renderConstructionList();
+            });
+        });
+    }
+    attachConstructionTabListeners();
+
+    function restoreSavedAssetsView() {
+        const savedView = localStorage.getItem('assetsView') || 'categories';
+        if (savedView === 'construction' && btnViewConstruction && btnViewCategories && assetsListContainer && constructionViewContainer) {
+            btnViewConstruction.classList.add('active');
+            btnViewCategories.classList.remove('active');
+            assetsListContainer.classList.add('hidden');
+            constructionViewContainer.classList.remove('hidden');
+        } else if (btnViewConstruction && btnViewCategories && assetsListContainer && constructionViewContainer) {
+            btnViewCategories.classList.add('active');
+            btnViewConstruction.classList.remove('active');
+            assetsListContainer.classList.remove('hidden');
+            constructionViewContainer.classList.add('hidden');
+        }
+    }
+
+    // ==== CLASSIFICAÇÃO DE TICKERS ====
+    function classifyTicker(ticker) {
+        if (!ticker || typeof ticker !== 'string') return { type: 'normal', label: 'Normal' };
+        const t = ticker.toUpperCase().trim();
+        if (t.endsWith('12')) return { type: 'subscricao', label: 'Direito de Subscrição' };
+        if (t.endsWith('13')) return { type: 'recibo', label: 'Recibo de Subscrição' };
+        if (t.endsWith('F')) return { type: 'fracao', label: 'Fração' };
+        return { type: 'normal', label: 'Normal' };
+    }
+
     // ==== CORES POR CLASSE (compartilhado entre donut + patrimônio) ====
     const CLASS_COLORS = {
         'FIIs': '#3B82F6',
@@ -249,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1 });
 
                     window.b3Data = json;
+                    localStorage.removeItem('dismissed_rights_alert'); // Reset alert dismissal on new import
                     renderDashboards();
 
                     uploadLabel.innerHTML = `<span class="icon" style="color:#10B981">✔</span> Importado`;
@@ -309,10 +386,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let monthsSet = new Set();
 
         let categories = {
-            "FIIs": { total: 0, ativos: {} },
-            "Ações": { total: 0, ativos: {} },
-            "ETFs": { total: 0, ativos: {} },
-            "Tesouro Direto": { total: 0, ativos: {} }
+            "FIIs": { total: 0, ativos: {}, specialAtivos: {} },
+            "Ações": { total: 0, ativos: {}, specialAtivos: {} },
+            "ETFs": { total: 0, ativos: {}, specialAtivos: {} },
+            "Tesouro Direto": { total: 0, ativos: {}, specialAtivos: {} }
         };
 
         let monthlyInvestments = {}; // To track history for chart
@@ -358,6 +435,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let shortName = produtoStr.split(" - ")[0];
             if (shortName.length > 15) shortName = shortName.substring(0, 15);
 
+            const tickerInfo = classifyTicker(shortName);
+            const isSpecial = tickerInfo.type !== 'normal';
+
             let dateParts = [];
             let rowDate = row[colData] ? String(row[colData]) : "";
             if (rowDate.includes('/')) dateParts = rowDate.split("/");
@@ -382,6 +462,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const signal = isCompra ? 1 : -1;
                 const netValue = valorNum * signal;
                 const netQuant = quantNum * signal;
+
+                if (isSpecial) {
+                    if (!categories[classe].specialAtivos[shortName]) {
+                        categories[classe].specialAtivos[shortName] = { 
+                            quant: 0, totalVal: 0, 
+                            type: tickerInfo.type, 
+                            typeLabel: tickerInfo.label,
+                            expiration: "" // Não tem data de vencimento no histórico normalmente
+                        };
+                    }
+                    categories[classe].specialAtivos[shortName].quant += netQuant;
+                    categories[classe].specialAtivos[shortName].totalVal += netValue;
+                    continue; // Ignora KPIs globais e gráficos para ativos especiais
+                }
 
                 totalPatrimonio += netValue;
                 categories[classe].total += netValue;
@@ -566,6 +660,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderPatrimonioScreen();
 
         renderAssetsAccordion(categories, currentPatrimonioReal);
+        renderConstructionView();
+        restoreSavedAssetsView();
 
         // ---- INTEGRAÇÃO DIRETA COM AS METAS ----
         // Reload metas after B3 data is available so applyB3DataToMetas() calculates values
@@ -750,6 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
 
         let totalAssetsCount = 0;
+        let totalRightsTickers = 0;
 
         const classIcons = { "FIIs": "🏢", "Ações": "💲", "ETFs": "📈", "Tesouro Direto": "🏫" };
 
@@ -876,10 +973,75 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            // ============ SPECIAL ASSETS ============
+            const specialKeys = cat.specialAtivos ? Object.keys(cat.specialAtivos).filter(k => cat.specialAtivos[k].quant > 0) : [];
+            if (specialKeys.length > 0) {
+                const specialSection = document.createElement('div');
+                specialSection.className = 'special-assets-section';
+                
+                let sHtml = `
+                    <div class="special-assets-header">
+                        <span class="icon">⏱️</span> Direitos e Subscrições
+                    </div>
+                    <table class="assets-table special-table">
+                        <thead>
+                            <tr>
+                                <th>Ativo</th>
+                                <th>Tipo</th>
+                                <th>Quant.</th>
+                                <th>Vencimento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                specialKeys.forEach(ticker => {
+                    const ativo = cat.specialAtivos[ticker];
+                    if (ativo.type === 'subscricao') totalRightsTickers++;
+                    
+                    let badgeClass = 'badge-special-default';
+                    let tooltip = 'Fração de cota — resultado de grupamentos ou desdobramentos. Verifique como sua corretora irá tratar.';
+                    if (ativo.type === 'subscricao') {
+                        badgeClass = 'badge-special-warning';
+                        tooltip = 'Direito de subscrição — você tem um prazo para exercer ou vender este direito na sua corretora. Verifique a data de vencimento.';
+                    } else if (ativo.type === 'recibo') {
+                        badgeClass = 'badge-special-info';
+                        tooltip = 'Recibo de subscrição — será convertido em cotas normais após a conclusão do processo de subscrição.';
+                    }
+
+                    sHtml += `
+                        <tr>
+                            <td>
+                                <div class="asset-table-ticker" style="cursor: pointer" onclick="window.openRaioXModal('${ticker}', '${ativo.type}')">
+                                    <span style="font-weight: 600; color: var(--text-primary); text-decoration: underline dotted;">${ticker}</span>
+                                </div>
+                            </td>
+                            <td><span class="${badgeClass}" title="${tooltip}">${ativo.typeLabel}</span></td>
+                            <td>${ativo.quant.toLocaleString('pt-BR')}</td>
+                            <td>${ativo.expiration || '-'}</td>
+                        </tr>
+                    `;
+                });
+                sHtml += `</tbody></table>`;
+                specialSection.innerHTML = sHtml;
+                clone.querySelector('.asset-group-content').appendChild(specialSection);
+            }
+
             container.appendChild(clone);
         });
 
-        document.getElementById('total-assets-count').textContent = `(${totalAssetsCount})`;
+        let assetsCountText = `(${totalAssetsCount})`;
+        if (totalRightsTickers > 0) {
+            assetsCountText += ` · ${totalRightsTickers} direito(s) pendente(s)`;
+            if (typeof showProactiveAlert === 'function') {
+                showProactiveAlert(totalRightsTickers);
+            }
+        } else {
+            if (typeof hideProactiveAlert === 'function') {
+                hideProactiveAlert();
+            }
+        }
+        document.getElementById('total-assets-count').textContent = assetsCountText;
     }
 
     function renderProventosScreen() {
@@ -3547,17 +3709,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==== RAIO-X DO ATIVO MODAL ====
     let raioxChartInstance = null;
 
-    function openRaioXModal(ticker) {
+    function openRaioXModal(ticker, specialType = null) {
         if (!window.dashboardState) return;
         const { categories, yieldTransactions, investTransactions } = window.dashboardState;
 
         // Find asset across categories
         let assetData = null, assetClass = '', className = '';
-        for (const [catName, cat] of Object.entries(categories)) {
-            if (cat.ativos[ticker]) {
-                assetData = cat.ativos[ticker];
-                className = catName;
-                break;
+        let isSpecial = !!specialType;
+
+        if (isSpecial) {
+            for (const [catName, cat] of Object.entries(categories)) {
+                if (cat.specialAtivos && cat.specialAtivos[ticker]) {
+                    assetData = cat.specialAtivos[ticker];
+                    className = catName;
+                    break;
+                }
+            }
+        } else {
+            for (const [catName, cat] of Object.entries(categories)) {
+                if (cat.ativos[ticker]) {
+                    assetData = cat.ativos[ticker];
+                    className = catName;
+                    break;
+                }
             }
         }
         if (!assetData) return;
@@ -3566,7 +3740,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const classLabels = { 'FIIs': 'FII', 'Ações': 'Ação', 'ETFs': 'ETF', 'Tesouro Direto': 'TD' };
         assetClass = classLabels[className] || className;
 
-        let typeLabel = className;
+        let typeLabel = isSpecial ? assetData.typeLabel : className;
         const tUp = ticker.toUpperCase();
         if (className === 'FIIs') {
             if (tUp.includes('KNCR') || tUp.includes('KNIP') || tUp.includes('IRDM') || tUp.includes('MXRF') || tUp.includes('BCFF') || tUp.includes('RECR') || tUp.includes('VGIR')) typeLabel = 'FII Papel';
@@ -3599,13 +3773,46 @@ document.addEventListener('DOMContentLoaded', () => {
             monthlyReturns = window.rentabState.individual[ticker].monthly || {};
         }
 
-        // Populate header
+        document.getElementById('raiox-type-badge').textContent = typeLabel;
+
+        // Toggle UI visibilities for Special vs Normal assets
+        const kpisGrid = document.querySelector('.raiox-kpis-grid');
+        const sections = document.querySelectorAll('.raiox-section');
+        const hrSep = document.getElementById('raiox-sections-hr');
+        const magicCard = document.getElementById('raiox-magic-card');
+        
+        let msgEl = document.getElementById('raiox-special-msg');
+        if (!msgEl) {
+            msgEl = document.createElement('div');
+            msgEl.id = 'raiox-special-msg';
+            msgEl.className = 'raiox-special-msg';
+            document.querySelector('.raiox-body').appendChild(msgEl);
+        }
+
+        // Populate header (FOR BOTH NORMAL AND SPECIAL)
         document.getElementById('raiox-title').textContent = `${ticker} — Raio-X`;
         document.getElementById('raiox-class-badge').textContent = assetClass;
         document.getElementById('raiox-ticker-name').textContent = ticker;
         document.getElementById('raiox-full-name').textContent = className;
         document.getElementById('raiox-type-badge').textContent = typeLabel;
 
+        if (isSpecial) {
+            if (kpisGrid) kpisGrid.style.display = 'none';
+            sections.forEach(s => s.style.display = 'none');
+            if (hrSep) hrSep.style.display = 'none';
+            if (magicCard) magicCard.classList.add('hidden');
+            
+            msgEl.style.display = 'block';
+            msgEl.textContent = `Este é um(a) ${assetData.typeLabel.toLowerCase()}. As métricas de rentabilidade e gráficos não se aplicam a este tipo de ativo.`;
+            document.getElementById('raiox-modal').classList.remove('hidden');
+            return; // Termina execução aqui
+        } else {
+            if (kpisGrid) kpisGrid.style.display = 'grid';
+            sections.forEach(s => s.style.display = 'block');
+            msgEl.style.display = 'none';
+        }
+
+        // --- NORMAL ASSET FLOW ---
         // Badge colors by class
         const badge = document.getElementById('raiox-class-badge');
         const typeBadge = document.getElementById('raiox-type-badge');
@@ -3932,6 +4139,340 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+
+    // ==========================================
+    // AUTO-UPDATE LOGIC
+    // ==========================================
+    const updateBanner = document.getElementById('update-banner');
+    const updateTitle = document.getElementById('update-title');
+    const updateIcon = document.getElementById('update-icon');
+    const updateProgressFill = document.getElementById('update-progress-fill');
+    const updateProgressTrack = document.getElementById('update-progress-track');
+    const btnUpdateDismiss = document.getElementById('btn-update-dismiss');
+    const btnUpdateRestart = document.getElementById('btn-update-restart');
+
+    if (updateBanner && window.api) {
+        // Novo: Lógica do botão de verificação manual
+        const btnCheckUpdates = document.getElementById('btn-check-updates');
+        if (btnCheckUpdates) {
+            btnCheckUpdates.addEventListener('click', async () => {
+                btnCheckUpdates.innerHTML = '⏳ Verificando...';
+                btnCheckUpdates.disabled = true;
+                
+                const res = await window.api.checkForUpdates();
+                if (res && res.error) {
+                    btnCheckUpdates.innerHTML = `❌ ${res.error}`;
+                    setTimeout(() => {
+                        btnCheckUpdates.innerHTML = '🔄 Checar Agora';
+                        btnCheckUpdates.disabled = false;
+                    }, 4000);
+                }
+            });
+
+            if (window.api.onUpdateNotAvailable) {
+                window.api.onUpdateNotAvailable(() => {
+                    btnCheckUpdates.innerHTML = '✅ Versão mais recente instalada';
+                    setTimeout(() => {
+                        btnCheckUpdates.innerHTML = '🔄 Checar Agora';
+                        btnCheckUpdates.disabled = false;
+                    }, 4000);
+                });
+            }
+        }
+
+        btnUpdateDismiss.addEventListener('click', () => {
+            updateBanner.classList.remove('visible');
+        });
+
+        btnUpdateRestart.addEventListener('click', () => {
+            if (window.api.quitAndInstallUpdate) {
+                window.api.quitAndInstallUpdate();
+            }
+        });
+
+        if (window.api.onUpdateAvailable) {
+            window.api.onUpdateAvailable(() => {
+                if (btnCheckUpdates) {
+                    btnCheckUpdates.innerHTML = '⬇️ Baixando atualização...';
+                }
+                updateBanner.classList.add('visible');
+                updateBanner.classList.remove('ready');
+                updateTitle.textContent = 'Nova versão disponível! Baixando atualização...';
+                updateIcon.innerHTML = '<i class="ti ti-download">⬇️</i>';
+                updateProgressTrack.classList.remove('hidden');
+                updateProgressFill.style.width = '0%';
+                btnUpdateRestart.classList.add('hidden');
+                btnUpdateDismiss.textContent = 'Dispensar';
+            });
+        }
+
+        if (window.api.onDownloadProgress) {
+            window.api.onDownloadProgress((percent) => {
+                updateProgressFill.style.width = `${percent}%`;
+            });
+        }
+
+        if (window.api.onUpdateDownloaded) {
+            window.api.onUpdateDownloaded(() => {
+                updateBanner.classList.add('ready');
+                updateTitle.textContent = 'Atualização pronta! Reinicie o app para aplicar.';
+                updateIcon.innerHTML = '<i class="ti ti-rocket">🚀</i>';
+                updateProgressTrack.classList.add('hidden');
+                btnUpdateRestart.classList.remove('hidden');
+                btnUpdateDismiss.textContent = 'Depois';
+            });
+        }
+        
+        if (window.api.onUpdaterError) {
+            window.api.onUpdaterError((errorMsg) => {
+                console.error('Updater Error:', errorMsg);
+                updateBanner.classList.remove('visible');
+            });
+        }
+    }
+
+    // ==== METODOS AUXILIARES: FOCO NA CONSTRUÇÃO ====
+    function getMagicNumberInfo(ticker, currentPrice, quant) {
+        let magicNumber = 0;
+        let avgMonthYield = 0;
+        if (window.dashboardState && window.dashboardState.yieldTransactions) {
+            const yieldsForAsset = window.dashboardState.yieldTransactions.filter(t => t.ticker === ticker && t.quant > 0);
+            if (yieldsForAsset.length > 0) {
+                let monthlyMap = {};
+                yieldsForAsset.forEach(t => {
+                    if (!monthlyMap[t.monthKey]) monthlyMap[t.monthKey] = [];
+                    monthlyMap[t.monthKey].push(t.valTotal / t.quant);
+                });
+                let months = Object.keys(monthlyMap).sort().slice(-12);
+                if (months.length > 0) {
+                    let sumAvg = 0;
+                    months.forEach(m => {
+                        sumAvg += monthlyMap[m].reduce((a, b) => a + b, 0) / monthlyMap[m].length;
+                    });
+                    avgMonthYield = sumAvg / months.length;
+                    if (avgMonthYield > 0 && currentPrice > 0) {
+                        magicNumber = Math.ceil(currentPrice / avgMonthYield);
+                    }
+                }
+            }
+        }
+        return { magicNumber, avgMonthYield };
+    }
+
+    function renderConstructionView() {
+        if (!window.dashboardState) return;
+        const { categories } = window.dashboardState;
+
+        let constructionAssets = [];
+
+        Object.keys(categories).forEach(catName => {
+            const cat = categories[catName];
+            Object.keys(cat.ativos).forEach(ticker => {
+                const ativo = cat.ativos[ticker];
+                if (ativo.quant <= 0) return;
+
+                const avgPrice = ativo.quant > 0 ? ((ativo.investedVal !== undefined ? ativo.investedVal : ativo.totalVal) / ativo.quant) : 0;
+                const currentPrice = ativo.currentPrice || avgPrice;
+                const pctDiff = avgPrice > 0 ? ((currentPrice / avgPrice) - 1) * 100 : 0;
+
+                const { magicNumber, avgMonthYield } = getMagicNumberInfo(ticker, currentPrice, ativo.quant);
+
+                if (magicNumber > 0) {
+                    const progressPct = Math.min((ativo.quant / magicNumber) * 100, 100);
+                    const isCompleted = progressPct >= 100;
+                    const cotasFaltam = Math.max(magicNumber - ativo.quant, 0);
+                    const costToComplete = cotasFaltam * currentPrice;
+
+                    let badgeText = 'CONSTRUINDO';
+                    let badgeClass = 'badge-construindo';
+                    let fillClass = 'fill-construindo';
+
+                    if (isCompleted) {
+                        badgeText = 'COMPLETO';
+                        badgeClass = 'badge-completo';
+                        fillClass = 'fill-completo';
+                    } else if (progressPct >= 70) {
+                        badgeText = 'QUASE LÁ';
+                        badgeClass = 'badge-quase-la';
+                        fillClass = 'fill-quase-la';
+                    }
+
+                    constructionAssets.push({
+                        ticker,
+                        quant: ativo.quant,
+                        magicNumber,
+                        avgMonthYield,
+                        currentPrice,
+                        progressPct,
+                        isCompleted,
+                        cotasFaltam,
+                        costToComplete,
+                        pctDiff,
+                        badgeText,
+                        badgeClass,
+                        fillClass,
+                        totalVal: ativo.totalVal
+                    });
+                }
+            });
+        });
+
+        window.constructionAssets = constructionAssets;
+
+        const prioridadeList = constructionAssets.filter(a => !a.isCompleted);
+        const completosList = constructionAssets.filter(a => a.isCompleted);
+
+        const badgePrioridade = document.getElementById('badge-prioridade');
+        const badgeCompletos = document.getElementById('badge-completos');
+        const badgeTodos = document.getElementById('badge-todos');
+
+        if (badgePrioridade) badgePrioridade.textContent = prioridadeList.length;
+        if (badgeCompletos) badgeCompletos.textContent = completosList.length;
+        if (badgeTodos) badgeTodos.textContent = constructionAssets.length;
+
+        renderSuggestedAction(prioridadeList);
+        renderConstructionList();
+    }
+
+    function renderSuggestedAction(prioridadeList) {
+        const wrapper = document.getElementById('suggested-action-card-wrapper');
+        if (!wrapper) return;
+
+        if (prioridadeList.length === 0) {
+            wrapper.innerHTML = `
+                <div class="suggested-action-card" style="border-left-color: var(--positive-color);">
+                    <div style="flex: 1; padding-right: 16px;">
+                        <span class="suggested-label" style="color: var(--positive-color);"><span class="suggested-dot">●</span> Carteira Balanceada</span>
+                        <h4 class="suggested-text">Todos os seus fundos/ativos com Número Mágico atingiram <strong>100% de conclusão</strong>! Parabéns! 🎉</h4>
+                    </div>
+                    <div class="suggested-percentage-col">
+                        <span class="suggested-percentage-val" style="color: var(--positive-color);">100%</span>
+                        <span class="suggested-percentage-lbl">Concluído</span>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const sortedPriorities = [...prioridadeList].sort((a, b) => b.progressPct - a.progressPct);
+        const nextTarget = sortedPriorities[0];
+
+        const costFormatted = nextTarget.costToComplete.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const pctFormatted = nextTarget.progressPct.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+        wrapper.innerHTML = `
+            <div class="suggested-action-card">
+                <div style="flex: 1; padding-right: 16px;">
+                    <span class="suggested-label"><span class="suggested-dot">●</span> Próxima Ação Sugerida</span>
+                    <h4 class="suggested-text">
+                        Faltam <strong>${nextTarget.cotasFaltam} cotas</strong> para <strong>${nextTarget.ticker}</strong> atingir o número mágico. No preço atual, isso representa um aporte de aproximadamente <strong>${costFormatted}</strong>.
+                    </h4>
+                </div>
+                <div class="suggested-percentage-col">
+                    <span class="suggested-percentage-val" style="color: var(--warning-color);">${pctFormatted}%</span>
+                    <span class="suggested-percentage-lbl">Concluído</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderConstructionList() {
+        const container = document.getElementById('construction-list');
+        if (!container) return;
+
+        const assets = window.constructionAssets || [];
+        if (assets.length === 0) {
+            container.innerHTML = `
+                <div class="construction-empty-state">
+                    <div class="construction-empty-icon">🎯</div>
+                    <p>Nenhum ativo com Número Mágico calculado na sua carteira.</p>
+                    <p style="font-size: 0.85rem; color: var(--text-tertiary); margin-top: 8px;">
+                        O Número Mágico é calculado automaticamente para ativos que possuem quantidade em carteira e que pagaram dividendos/proventos nos últimos 12 meses.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        let filtered = [];
+        const tab = window.currentConstructionTab || 'prioridade';
+
+        if (tab === 'prioridade') {
+            filtered = assets.filter(a => !a.isCompleted).sort((a, b) => b.progressPct - a.progressPct);
+        } else if (tab === 'completos') {
+            filtered = assets.filter(a => a.isCompleted).sort((a, b) => b.totalVal - a.totalVal);
+        } else {
+            const inProgress = assets.filter(a => !a.isCompleted).sort((a, b) => b.progressPct - a.progressPct);
+            const completed = assets.filter(a => a.isCompleted).sort((a, b) => b.progressPct - a.progressPct);
+            filtered = [...inProgress, ...completed];
+        }
+
+        if (filtered.length === 0) {
+            let msg = "Nenhum ativo nesta aba.";
+            if (tab === 'prioridade') msg = "Nenhum ativo em andamento.";
+            else if (tab === 'completos') msg = "Nenhum ativo completo ainda.";
+
+            container.innerHTML = `
+                <div class="construction-empty-state" style="padding: 32px;">
+                    <p>${msg}</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = '';
+
+        filtered.forEach(asset => {
+            const card = document.createElement('div');
+            card.className = `construction-card ${asset.isCompleted ? 'completed' : ''}`;
+            
+            const isPos = asset.pctDiff >= 0;
+            const trendClass = isPos ? 'positive' : 'negative';
+            const trendSign = isPos ? '▲' : '▼';
+
+            const activeBars = Math.ceil(asset.progressPct / 25);
+
+            card.innerHTML = `
+                <div class="construction-card-left">
+                    <span class="construction-ticker" onclick="event.stopPropagation(); window.openRaioXModal('${asset.ticker}')">${asset.ticker}</span>
+                    <span class="construction-quotas">${asset.quant} / ${asset.magicNumber} cotas</span>
+                </div>
+                
+                <div class="construction-card-middle">
+                    <div class="construction-progress-header">
+                        <span>Rumo ao número mágico</span>
+                        <span>${asset.progressPct.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>
+                    </div>
+                    <div class="construction-progress-bar-track">
+                        <div class="construction-progress-bar-fill ${asset.fillClass}" style="width: ${asset.progressPct}%"></div>
+                    </div>
+                    <div class="construction-badge ${asset.badgeClass}">${asset.badgeText}</div>
+                </div>
+                
+                <div class="construction-card-right">
+                    <div class="construction-price">${asset.currentPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                    <div class="construction-trend ${trendClass}" style="margin-top: 2px;">${trendSign} ${Math.abs(asset.pctDiff).toFixed(1)}%</div>
+                    <div class="construction-bars">
+                        <div class="bar bar-1 ${activeBars >= 1 ? 'active' : ''}"></div>
+                        <div class="bar bar-2 ${activeBars >= 2 ? 'active' : ''}"></div>
+                        <div class="bar bar-3 ${activeBars >= 3 ? 'active' : ''}"></div>
+                        <div class="bar bar-4 ${activeBars >= 4 ? 'active' : ''}"></div>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(card);
+        });
+
+        // Antigravity GSAP entry animation for the cards
+        if (typeof gsap !== 'undefined') {
+            const cards = container.querySelectorAll('.construction-card');
+            gsap.fromTo(cards, 
+                { y: 15, opacity: 0 }, 
+                { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out" }
+            );
+        }
+    }
 
 });
 
