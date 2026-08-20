@@ -1,5 +1,9 @@
 # Changelog — VS&A
 
+## v5.2.0 — 14/08/2026
+- (preencha as novidades desta versão)
+
+
 ## v5.1.0 — 14/08/2026
 - (preencha as novidades desta versão)
 

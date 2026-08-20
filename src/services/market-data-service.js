@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
+const { configService } = require('./config-service');
 
 class MarketDataService {
     constructor() {
@@ -85,8 +86,9 @@ class MarketDataService {
     }
 
     /**
-     * Get current prices for a list of tickers via Google Finance Scraper.
-     * Fast and parallel, avoids Yahoo "crumb" and 429 errors entirely.
+     * Get current prices for a list of tickers via brapi.dev API.
+     * Fetches each ticker individually in parallel (respecting free-tier 1-ticker limit).
+     * Falls back to cache on error or when token is not configured.
      */
     async getPrices(tickers, forceRefresh = false) {
         const results = {};
@@ -105,43 +107,49 @@ class MarketDataService {
 
         if (toFetch.length === 0) return results;
 
-        // Process concurrently via Google Finance
+        const token = configService.getConfig().brapi_token || '';
+
+        if (!token) {
+            console.warn('[Brapi] Token não configurado, usando cache.');
+            for (const ticker of toFetch) {
+                if (this.cache[ticker]) results[ticker] = this.cache[ticker].price;
+            }
+            return results;
+        }
+
         const fetchPromises = toFetch.map(async (ticker) => {
+            const cleanTicker = ticker.replace('.SA', '').trim();
+            const url = `https://brapi.dev/api/quote/${encodeURIComponent(cleanTicker)}?token=${token}`;
+
             try {
-                const cleanTicker = ticker.replace('.SA', '');
-                const res = await fetch(`https://www.google.com/finance/quote/${cleanTicker}:BVMF`, {
+                const res = await fetch(url, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    timeout: 5000
+                    timeout: 8000
                 });
-                
-                if (res.ok) {
-                    const html = await res.text();
-                    const match = html.match(/class="YMlKec fxKbKc"[^>]*>R\$\s*([0-9.,]+)/);
-                    if (match) {
-                        let val = match[1];
-                        if (val.includes(',') && val.includes('.')) {
-                            if (val.indexOf(',') > val.indexOf('.')) {
-                                val = val.replace(/\./g, '').replace(',', '.');
-                            } else {
-                                val = val.replace(/,/g, '');
-                            }
-                        } else if (val.includes(',')) {
-                            val = val.replace(',', '.');
-                        }
-                        const currentPrice = parseFloat(val);
-                        
-                        results[ticker] = currentPrice;
-                        this.cache[ticker] = {
-                            price: currentPrice,
-                            timestamp: Date.now() / 1000
-                        };
-                        return;
+
+                const json = await res.json();
+
+                if (json.error || json.message) {
+                    console.warn(`[Brapi] Falha ao buscar cotação de ${ticker}: ${json.message || json.error}`);
+                    if (this.cache[ticker]) {
+                        results[ticker] = this.cache[ticker].price;
                     }
+                    return;
                 }
-                
-                throw new Error("Could not parse Google Finance HTML");
+
+                const item = json.results && json.results[0];
+                if (item && typeof item.regularMarketPrice === 'number') {
+                    const price = item.regularMarketPrice;
+                    results[ticker] = price;
+                    this.cache[ticker] = {
+                        price,
+                        timestamp: Date.now() / 1000
+                    };
+                } else if (this.cache[ticker]) {
+                    results[ticker] = this.cache[ticker].price;
+                }
             } catch (e) {
-                console.warn(`[GoogleFinance] Failed to fetch ${ticker}, returning cache. (${e.message})`);
+                console.warn(`[Brapi] Erro de rede ao buscar cotação de ${ticker}: ${e.message}`);
                 if (this.cache[ticker]) {
                     results[ticker] = this.cache[ticker].price;
                 }

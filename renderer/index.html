@@ -142,12 +142,12 @@
                 <div class="config-tab-panel" id="config-panel-extrato">
                     <!-- Arquivo do extrato -->
                     <div class="config-section">
-                        <span class="config-section-label">ARQUIVO DO EXTRATO</span>
+                        <span class="config-section-label">PASTA DOS EXTRATOS B3</span>
                         <div class="config-file-input-row">
-                            <input type="text" id="config-excel-path" class="modal-input config-file-input" placeholder="Ex: C:\Users\Diego\Downloads\Extrato.xlsx">
-                            <button class="config-file-browse-btn" id="btn-browse-excel" title="Procurar arquivo">📂</button>
+                            <input type="text" id="config-excel-path" class="modal-input config-file-input" placeholder="Ex: C:\Users\Diego\Downloads\Extratos B3">
+                            <button class="config-file-browse-btn" id="btn-browse-excel" title="Procurar pasta">📂</button>
                         </div>
-                        <span class="form-hint">Caminho completo do arquivo no seu computador. Deixe vazio para importar manualmente.</span>
+                        <span class="form-hint">Caminho da pasta que contém seus extratos anuais da B3 (.xlsx). O app consolidará todos automaticamente.</span>
                     </div>
 
                     <!-- Última sincronização -->
@@ -165,6 +165,38 @@
                                 🔄 Sincronizar agora
                             </button>
                         </div>
+                    </div>
+
+                    <!-- Classificação Manual de Ativos (Override) -->
+                    <div class="config-section">
+                        <span class="config-section-label">CLASSIFICAÇÃO MANUAL DE ATIVOS (OVERRIDE)</span>
+                        <div class="config-override-container">
+                            <div class="config-override-table-wrapper">
+                                <table class="config-override-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ticker</th>
+                                            <th>Categoria</th>
+                                            <th style="width: 40px; text-align: center;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="config-override-tbody">
+                                        <!-- Preenchido via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="config-override-add-row">
+                                <input type="text" id="config-override-ticker" class="modal-input" placeholder="Ex: VGIA11" style="text-transform: uppercase; width: 130px;" maxlength="10">
+                                <select id="config-override-class" class="modal-input" style="width: 150px;">
+                                    <option value="FIIs">FIIs</option>
+                                    <option value="Ações">Ações</option>
+                                    <option value="ETFs">ETFs</option>
+                                    <option value="Tesouro Direto">Tesouro Direto</option>
+                                </select>
+                                <button type="button" class="btn-secondary btn-sm" id="btn-add-override" style="white-space: nowrap;">＋ Adicionar</button>
+                            </div>
+                        </div>
+                        <span class="form-hint">Defina a classe manualmente caso algum ativo seja classificado incorretamente pela detecção automática.</span>
                     </div>
                 </div>
 
@@ -202,6 +234,16 @@
                             <span class="config-key-status" id="config-key-status"></span>
                         </div>
                         <span class="form-hint" id="config-api-key-hint">Gere gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--primary-color);">aistudio.google.com/apikey</a></span>
+                    </div>
+
+                    <!-- brapi.dev Token -->
+                    <div class="config-section">
+                        <span class="config-section-label">TOKEN BRAPI.DEV (COTAÇÕES)</span>
+                        <div class="config-apikey-row">
+                            <input type="password" id="config-brapi-token" class="modal-input config-apikey-input" placeholder="Cole seu token da brapi.dev aqui">
+                            <button class="config-apikey-toggle" id="config-brapi-toggle" title="Mostrar/Ocultar">👁️</button>
+                        </div>
+                        <span class="form-hint">Crie uma conta gratuita em <a href="https://brapi.dev" target="_blank" style="color: var(--primary-color);">brapi.dev</a> para gerar seu token (15.000 req/mês grátis). Necessário para atualizar cotações em tempo real.</span>
                     </div>
                 </div>
 
@@ -281,9 +323,9 @@
             <div class="nav-right">
                 <div class="upload-wrapper">
                     <button class="nav-btn btn-outline" id="btn-upload-label">
-                        <span class="icon">📁</span> Importar Extrato B3
+                        <span class="icon">📁</span> Importar arquivo avulso
                     </button>
-                    <input type="file" id="excel-upload" accept=".xlsx" title="Importar Extrato B3">
+                    <input type="file" id="excel-upload" accept=".xlsx" title="Importar arquivo avulso">
                 </div>
                 <select class="nav-btn btn-outline" id="global-year-filter" style="min-width: 90px; appearance: auto; cursor: pointer; border-radius: 6px; padding: 6px 12px; font-weight: 500;">
                     <!-- Preenchido via JS -->
@@ -1250,7 +1292,7 @@
 
     <!-- === CHAT SIDEBAR LATERAL (persistente em todas as telas) === -->
     <button class="chat-fab" id="btn-toggle-chat" title="Abrir chat com IA">
-        <span class="chat-fab-icon">💬</span>
+        <img src="assets/kaguya/kaguya_curiosa_avatar.png" class="chat-fab-avatar-img" alt="Kaguya" />
         <span class="chat-fab-badge hidden" id="chat-fab-badge">1</span>
     </button>
 
@@ -1273,9 +1315,11 @@
         <div class="chat-main-area">
             <div class="chat-drawer-header">
                 <div class="chat-drawer-title">
-                    <span class="chat-drawer-avatar">🤖</span>
+                    <span class="chat-drawer-avatar">
+                        <img src="assets/kaguya/kaguya_curiosa_avatar.png" class="chat-drawer-avatar-img" alt="Kaguya" />
+                    </span>
                     <div>
-                        <div class="chat-drawer-name"><strong>V S &amp; A</strong> — Assistente IA</div>
+                        <div class="chat-drawer-name"><strong>Kaguya</strong> — Assistente IA</div>
                         <div class="chat-drawer-status" id="chat-online-status">● Pronto para conversar</div>
                     </div>
                 </div>
@@ -1288,9 +1332,11 @@
             </div>
             <div class="ai-chat-messages" id="ai-chat-messages">
                 <div class="ai-msg ai-msg-bot">
-                    <div class="ai-msg-avatar">🤖</div>
+                    <div class="ai-msg-avatar">
+                        <img src="assets/kaguya/kaguya_curiosa_avatar.png" class="ai-msg-avatar-img" alt="Kaguya" />
+                    </div>
                     <div class="ai-msg-bubble">
-                        Olá! Sou o assistente <strong>V S &amp; A</strong>. 🚀<br><br>
+                        Olá! Sou a <strong>Kaguya</strong>, sua assistente financeira no VS&amp;A. ✨<br><br>
                         Importe seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!
                     </div>
                 </div>

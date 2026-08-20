@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // Extrato
     getExtratoFile: () => ipcRenderer.invoke('get-extrato-file'),
+    getExtratoFiles: () => ipcRenderer.invoke('get-extrato-files'),
 
     // Market Data
     getQuotes: (tickers, force) => ipcRenderer.invoke('get-quotes', tickers, force),
@@ -44,6 +45,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // Native dialogs
     selectFile: (options) => ipcRenderer.invoke('select-file', options),
+    selectFolder: () => ipcRenderer.invoke('select-folder'),
 
     // Version & Changelog
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),

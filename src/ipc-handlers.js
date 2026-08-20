@@ -200,26 +200,46 @@ function registerIpcHandlers() {
     });
 
     // ==========================================
-    // EXTRATO FILE
+    // EXTRATO FILES
     // ==========================================
-    ipcMain.handle('get-extrato-file', () => {
-        // Try configured path first
+    ipcMain.handle('get-extrato-files', () => {
         const cfg = configService.getConfig();
-        const configuredPath = cfg.excel_path || '';
+        const folderPath = cfg.excel_folder_path || '';
 
-        if (configuredPath && fs.existsSync(configuredPath)) {
-            const buffer = fs.readFileSync(configuredPath);
-            return buffer;
+        if (!folderPath || !fs.existsSync(folderPath)) {
+            return [];
         }
 
-        // Fallback: local file
-        const excelPath = path.join(getBasePath(), 'Extrato.xlsx');
-        if (fs.existsSync(excelPath)) {
-            const buffer = fs.readFileSync(excelPath);
-            return buffer;
-        }
+        try {
+            const stat = fs.statSync(folderPath);
+            if (!stat.isDirectory()) {
+                return [];
+            }
 
-        return null;
+            const files = fs.readdirSync(folderPath);
+            const excelFiles = files.filter(file => {
+                const ext = path.extname(file).toLowerCase();
+                return ext === '.xlsx' || ext === '.xls';
+            });
+
+            const result = [];
+            for (const file of excelFiles) {
+                const filePath = path.join(folderPath, file);
+                try {
+                    const buffer = fs.readFileSync(filePath);
+                    result.push({
+                        fileName: file,
+                        buffer: buffer
+                    });
+                } catch (err) {
+                    console.error(`Error reading B3 extract file ${file}:`, err);
+                }
+            }
+            return result;
+        } catch (e) {
+            console.error(`Error listing B3 folder path ${folderPath}:`, e);
+            return [];
+        }
     });
 
     // ==========================================
@@ -358,6 +378,14 @@ function registerIpcHandlers() {
                 { name: 'Excel', extensions: ['xlsx', 'xls'] },
                 { name: 'Todos', extensions: ['*'] }
             ]
+        });
+        if (result.canceled || result.filePaths.length === 0) return null;
+        return result.filePaths[0];
+    });
+
+    ipcMain.handle('select-folder', async (_event) => {
+        const result = await dialog.showOpenDialog({
+            properties: ['openDirectory']
         });
         if (result.canceled || result.filePaths.length === 0) return null;
         return result.filePaths[0];

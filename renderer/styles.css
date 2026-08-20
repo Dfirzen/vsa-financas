@@ -2118,6 +2118,80 @@ body.light-mode .config-sync-btn {
     border-color: #e2e8f0;
 }
 
+/* === Override Table === */
+.config-override-container {
+    background: var(--modal-section-bg);
+    border: 0.5px solid #3a4460;
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+body.light-mode .config-override-container {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+}
+
+.config-override-table-wrapper {
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.config-override-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.config-override-table th {
+    text-align: left;
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.config-override-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+body.light-mode .config-override-table td {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.config-override-add-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding-top: 4px;
+}
+
+.config-override-del-btn {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.config-override-del-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.config-override-empty {
+    text-align: center;
+    color: var(--text-tertiary);
+    padding: 12px;
+    font-size: 0.78rem;
+}
+
 /* === API Key Row === */
 .config-apikey-row {
     display: flex;
@@ -2580,6 +2654,8 @@ body.light-mode .pat-alert {
     box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     color: white;
+    overflow: hidden;
+    padding: 0;
 }
 
 .chat-fab:hover {
@@ -2664,6 +2740,17 @@ body.light-mode .pat-alert {
     justify-content: center;
     font-size: 1.2rem;
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.chat-drawer-avatar-img,
+.ai-msg-avatar-img,
+.chat-fab-avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
 }
 
 .chat-drawer-name {
@@ -2912,6 +2999,7 @@ body.light-mode .pat-alert {
     justify-content: center;
     font-size: 1rem;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .ai-msg-bubble {

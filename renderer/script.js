@@ -170,6 +170,62 @@ document.addEventListener('DOMContentLoaded', () => {
         return { type: 'normal', label: 'Normal' };
     }
 
+    // ==== CLASSIFICAÇÃO DE ATIVOS (FIIs, ETFs, Tesouro Direto, Ações) ====
+    function classifyAsset(produtoStr, ticker, overrides = {}) {
+        const cleanTicker = ticker ? String(ticker).toUpperCase().trim() : '';
+
+        // 1. Rede de segurança: Override manual configurado pelo usuário
+        if (cleanTicker && overrides && overrides[cleanTicker]) {
+            return overrides[cleanTicker];
+        }
+
+        const pUpper = produtoStr ? String(produtoStr).toUpperCase().trim() : '';
+
+        // 2. Tesouro Direto / Renda Fixa
+        if (pUpper.includes("TESOURO") || pUpper.includes("CDB") || pUpper.match(/\bCRA\b/) || pUpper.match(/\bCRI\b/) || pUpper.match(/\bLCI\b/)) {
+            return "Tesouro Direto";
+        }
+
+        // 3. ETFs: prioridade pelo nome do produto oficial na B3 ("FUNDO DE ÍNDICE", "FDO DE INDICE", etc.) ou "ETF"
+        const hasEtfName = pUpper.includes("FUNDO DE ÍNDICE") ||
+                           pUpper.includes("FUNDO DE INDICE") ||
+                           pUpper.includes("FDO DE INDICE") ||
+                           pUpper.includes("FDO. DE INDICE") ||
+                           pUpper.includes("FDO DE ÍNDICE") ||
+                           pUpper.includes("FDO. DE ÍNDICE") ||
+                           /\bETF\b/.test(pUpper);
+
+        const isKnownEtfTicker = cleanTicker.startsWith("BOVA") ||
+                                cleanTicker.startsWith("IVVB") ||
+                                cleanTicker.startsWith("HASH") ||
+                                cleanTicker.startsWith("SMAL") ||
+                                cleanTicker.startsWith("XINA") ||
+                                cleanTicker.startsWith("SPXI") ||
+                                cleanTicker.startsWith("BRAX");
+
+        if (hasEtfName || isKnownEtfTicker) {
+            return "ETFs";
+        }
+
+        // 4. FIIs: regras robustas por nome
+        if (pUpper.includes("FUNDO DE INV IMOB") ||
+            pUpper.includes("FDO INV IMOB") ||
+            pUpper.includes("FDO. INV. IMOB") ||
+            pUpper.includes("IMOBILIARIO") ||
+            pUpper.includes("IMOBILIÁRIO") ||
+            pUpper.includes("FII ") ||
+            pUpper.endsWith(" FII")) {
+            return "FIIs";
+        }
+
+        // 5. Fallback final: ticker de 4 letras + "11" -> FIIs, senão Ações
+        if (/^[A-Z]{4}11$/.test(cleanTicker) || /^[A-Z]{4}11[A-Z]?$/.test(cleanTicker)) {
+            return "FIIs";
+        }
+
+        return "Ações";
+    }
+
     // ==== CORES POR CLASSE (compartilhado entre donut + patrimônio) ====
     const CLASS_COLORS = {
         'FIIs': '#3B82F6',
@@ -281,22 +337,126 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==== AUTO-LOAD EXTRATO LOCAL ====
     async function loadLocalExtrato() {
         try {
-            const buffer = await window.api.getExtratoFile();
-            if (!buffer) return;
-            const data = new Uint8Array(buffer);
-            const workbook = typeof XLSX !== 'undefined' ? XLSX.read(data, { type: 'array' }) : null;
-            if (workbook) {
-                const firstSheetName = workbook.SheetNames[0];
-                const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1 });
-                window.b3Data = json;
-                const uploadLabel = document.getElementById('btn-upload-label');
-                if (uploadLabel) {
-                    uploadLabel.innerHTML = `<span class="icon" style="color:#10B981">✔</span> Sincronizado`;
+            const files = await window.api.getExtratoFiles();
+            if (!files || files.length === 0) return;
+
+            let allRows = [];
+            const columns = [
+                'Entrada/Saída',
+                'Data',
+                'Movimentação',
+                'Produto',
+                'Instituição',
+                'Quantidade',
+                'Preço unitário',
+                'Valor da Operação'
+            ];
+
+            let loadedCount = 0;
+
+            function normalizeNumberString(val) {
+                if (val === undefined || val === null) return '';
+                if (typeof val === 'number') {
+                    return val.toFixed(4);
                 }
-                renderDashboards();
+                const str = String(val).trim();
+                if (str === '-') return '-';
+                let clean = str;
+                if (clean.includes(',')) {
+                    clean = clean.replace(/\./g, '').replace(',', '.');
+                }
+                const num = parseFloat(clean);
+                return isNaN(num) ? str : num.toFixed(4);
             }
+
+            for (const file of files) {
+                try {
+                    const data = new Uint8Array(file.buffer);
+                    const workbook = typeof XLSX !== 'undefined' ? XLSX.read(data, { type: 'array' }) : null;
+                    if (!workbook) continue;
+
+                    let sheetName = workbook.SheetNames.find(name => name === 'Movimentação');
+                    if (!sheetName) {
+                        sheetName = workbook.SheetNames[0];
+                    }
+                    if (!sheetName) continue;
+
+                    const sheet = workbook.Sheets[sheetName];
+                    const sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                    if (!sheetRows || sheetRows.length === 0) continue;
+
+                    let headerRowIndex = -1;
+                    for (let i = 0; i < Math.min(10, sheetRows.length); i++) {
+                        if (sheetRows[i] && sheetRows[i].includes && sheetRows[i].includes("Produto")) {
+                            headerRowIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (headerRowIndex === -1) {
+                        headerRowIndex = 0;
+                    }
+
+                    const headers = sheetRows[headerRowIndex].map(h => String(h).trim());
+                    for (let i = headerRowIndex + 1; i < sheetRows.length; i++) {
+                        const rowData = sheetRows[i];
+                        if (!rowData || rowData.length === 0) continue;
+
+                        const rowObj = {};
+                        headers.forEach((header, colIndex) => {
+                            if (header) {
+                                rowObj[header] = rowData[colIndex];
+                            }
+                        });
+                        allRows.push(rowObj);
+                    }
+                    loadedCount++;
+                } catch (e) {
+                    console.error(`Erro ao processar arquivo ${file.fileName}:`, e);
+                }
+            }
+
+            if (allRows.length === 0) return;
+
+            // Deduplication
+            const uniqueRows = [];
+            const seen = new Set();
+
+            for (const row of allRows) {
+                const dataKey = row['Data'] !== undefined ? String(row['Data']).trim() : '';
+                const movKey = row['Movimentação'] !== undefined ? String(row['Movimentação']).trim() : '';
+                const prodKey = row['Produto'] !== undefined ? String(row['Produto']).trim() : '';
+                const quantKey = normalizeNumberString(row['Quantidade']);
+                const valorKey = normalizeNumberString(row['Valor da Operação']);
+
+                const uniqueKey = `${dataKey}|${movKey}|${prodKey}|${quantKey}|${valorKey}`;
+
+                if (!seen.has(uniqueKey)) {
+                    seen.add(uniqueKey);
+                    uniqueRows.push(row);
+                }
+            }
+
+            // Convert back to 2D array format (header: 1)
+            const b3Data = [columns];
+            for (const row of uniqueRows) {
+                const rowArray = columns.map(col => {
+                    const val = row[col];
+                    return val !== undefined ? val : '';
+                });
+                b3Data.push(rowArray);
+            }
+
+            window.b3Data = b3Data;
+            localStorage.removeItem('dismissed_rights_alert'); // Reset alert dismissal on new import/sync
+
+            const uploadLabel = document.getElementById('btn-upload-label');
+            if (uploadLabel) {
+                uploadLabel.innerHTML = `<span class="icon" style="color:#10B981">✔</span> Sincronizado (${loadedCount} arquivo${loadedCount > 1 ? 's' : ''})`;
+            }
+            renderDashboards();
         } catch(err) {
-            console.log("Extrato local não encontrado ou erro.", err);
+            console.log("Erro ao carregar extratos locais.", err);
         }
     }
 
@@ -415,25 +575,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (typeof row[colQuant] === "string") quantNum = parseFloat(row[colQuant].replace(/\./g, '').replace(',', '.')) || 0;
             }
 
-            if (!movimentacao || !produtoStr) continue;
-
-            let classe = "Ações";
-            const pUpper = produtoStr.toUpperCase();
-
-            // Lista básica para identificar ETFs conhecidos antes de aplicar regra do "11"
-            const isETF = pUpper.includes("BOVA") || pUpper.includes("IVVB") || pUpper.includes("HASH") || pUpper.includes("SMAL") || pUpper.includes("XINA");
-
-            // Lógica Básica de Classificação
-            if (pUpper.includes("FII ") || pUpper.includes("FUNDO DE INV IMOB") || pUpper.includes("IMOBILIARIO") || (pUpper.includes("11") && !isETF)) {
-                classe = "FIIs";
-            } else if (pUpper.includes("TESOURO") || pUpper.includes("CDB") || pUpper.match(/\bCRA\b/) || pUpper.match(/\bCRI\b/) || pUpper.match(/\bLCI\b/)) {
-                classe = "Tesouro Direto";
-            } else if (isETF) {
-                classe = "ETFs";
-            }
-
-            let shortName = produtoStr.split(" - ")[0];
+            let shortName = produtoStr.split(" - ")[0].trim();
             if (shortName.length > 15) shortName = shortName.substring(0, 15);
+
+            const assetOverrides = (window.appConfig && window.appConfig.asset_class_overrides) || {};
+            const classe = classifyAsset(produtoStr, shortName, assetOverrides);
 
             const tickerInfo = classifyTicker(shortName);
             const isSpecial = tickerInfo.type !== 'normal';
@@ -2290,8 +2436,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiTyping = document.getElementById('ai-typing');
     
     let chatSessionId = "session_" + Date.now();
+    let hasAutoAnalyzed = false;
 
-    function addChatMessage(role, text) {
+    function addChatMessage(role, text, avatarEmotion = 'curiosa') {
         if (!chatMessages) return;
         
         const isBot = role === 'bot';
@@ -2300,7 +2447,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const avatarDiv = document.createElement('div');
         avatarDiv.className = 'ai-msg-avatar';
-        avatarDiv.textContent = isBot ? '🤖' : '👤';
+
+        if (isBot) {
+            let avatarImgSrc = 'assets/kaguya/kaguya_curiosa_avatar.png';
+            if (avatarEmotion === 'ideia') {
+                avatarImgSrc = 'assets/kaguya/kaguya_ideia_avatar.png';
+            } else if (avatarEmotion === 'surpresa') {
+                avatarImgSrc = 'assets/kaguya/kaguya_surpresa_avatar.png';
+            } else if (avatarEmotion === 'brava' || (typeof text === 'string' && (text.startsWith('**Erro') || text.includes('Erro:')))) {
+                avatarImgSrc = 'assets/kaguya/kaguya_brava_avatar.png';
+            }
+            avatarDiv.innerHTML = `<img src="${avatarImgSrc}" class="ai-msg-avatar-img" alt="Kaguya" />`;
+        } else {
+            avatarDiv.textContent = '👤';
+        }
         
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'ai-msg-bubble';
@@ -2348,13 +2508,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (aiTyping) aiTyping.classList.add('hidden');
             
             if (data.error) {
-                addChatMessage('bot', `**Erro:** ${data.error}`);
+                addChatMessage('bot', `**Erro:** ${data.error}`, 'brava');
             } else if (data.response) {
-                addChatMessage('bot', data.response);
+                addChatMessage('bot', data.response, 'curiosa');
             }
         } catch(e) {
             if (aiTyping) aiTyping.classList.add('hidden');
-            addChatMessage('bot', `**Erro de conexão:** Não foi possível comunicar com o servidor.`);
+            addChatMessage('bot', `**Erro de conexão:** Não foi possível comunicar com o servidor.`, 'brava');
             console.error(e);
         } finally {
             chatInput.disabled = false;
@@ -2384,7 +2544,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Mantém apenas a barra de digitação se ela estiver dentro, e reseta
             chatMessages.innerHTML = '';
-            addChatMessage('bot', "Olá! Sou o **InvestAI**, seu consultor financeiro pessoal. 🚀\n\nImporte seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!");
+            addChatMessage('bot', "Olá! Sou a **Kaguya**, sua assistente financeira no VS&A. ✨\n\nImporte seus dados B3 e me pergunte qualquer coisa sobre seus investimentos, metas e estratégias!", 'curiosa');
         });
     }
 
@@ -2396,13 +2556,54 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatOverlay = document.getElementById('chat-overlay');
     const btnCloseChat = document.getElementById('btn-close-chat');
 
-    function openChatDrawer() {
+    async function openChatDrawer() {
         if (!chatDrawer) return;
         chatDrawer.classList.add('open');
         if (chatOverlay) chatOverlay.classList.remove('hidden');
         if (btnToggleChat) btnToggleChat.classList.add('open');
         if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
         if (chatInput) setTimeout(() => chatInput.focus(), 380);
+
+        // Auto-análise na primeira vez que o painel é aberto em cada sessão
+        if (!hasAutoAnalyzed) {
+            hasAutoAnalyzed = true;
+            const state = window.dashboardState || {};
+            const hasData = state.categories && Object.keys(state.categories).length > 0;
+
+            if (hasData) {
+                if (chatMessages) {
+                    chatMessages.innerHTML = '';
+                }
+
+                if (aiTyping) {
+                    aiTyping.classList.remove('hidden');
+                    chatMessages.appendChild(aiTyping);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+
+                try {
+                    const slimPortfolioData = {
+                        categories: state.categories,
+                        performance: { proventos: state.proventosTotais },
+                        metas: typeof currentMetas !== 'undefined' ? currentMetas : [],
+                        analysisType: 'ativos_vs_metas'
+                    };
+                    const data = await window.api.aiAnalyze(slimPortfolioData);
+
+                    if (aiTyping) aiTyping.classList.add('hidden');
+
+                    if (data.error) {
+                        addChatMessage('bot', `Olá! Tentei gerar uma análise da sua carteira, mas ocorreu um erro: ${data.error}`, 'brava');
+                    } else if (data.analysis) {
+                        addChatMessage('bot', `Olá! Analisei sua carteira automaticamente com base nos seus dados mais recentes:\n\n${data.analysis}`, 'ideia');
+                    }
+                } catch (e) {
+                    if (aiTyping) aiTyping.classList.add('hidden');
+                    console.error('Erro na auto-análise do chat:', e);
+                    addChatMessage('bot', `Olá! Não foi possível comunicar com o serviço de IA para a análise inicial. Verifique sua chave de API nas configurações.`, 'brava');
+                }
+            }
+        }
     }
 
     function closeChatDrawer() {
@@ -2512,6 +2713,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const isPassword = apiKeyInput.type === 'password';
             apiKeyInput.type = isPassword ? 'text' : 'password';
             apiKeyToggle.textContent = isPassword ? '🔒' : '👁️';
+        });
+    }
+
+    // --- Brapi Token Toggle (show/hide) ---
+    const brapiToggle = document.getElementById('config-brapi-toggle');
+    const brapiTokenInput = document.getElementById('config-brapi-token');
+    if (brapiToggle && brapiTokenInput) {
+        brapiToggle.addEventListener('click', () => {
+            const isPassword = brapiTokenInput.type === 'password';
+            brapiTokenInput.type = isPassword ? 'text' : 'password';
+            brapiToggle.textContent = isPassword ? '🔒' : '👁️';
         });
     }
 
@@ -2673,10 +2885,72 @@ document.addEventListener('DOMContentLoaded', () => {
         configModal.classList.remove('hidden');
     }
 
+    // --- Override table state and rendering ---
+    let currentAssetOverrides = {};
+
+    function renderAssetOverridesTable() {
+        const tbody = document.getElementById('config-override-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        const keys = Object.keys(currentAssetOverrides);
+        if (keys.length === 0) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="3" class="config-override-empty">Nenhum override manual cadastrado.</td>`;
+            tbody.appendChild(tr);
+            return;
+        }
+
+        keys.sort().forEach(ticker => {
+            const tr = document.createElement('tr');
+            const cat = currentAssetOverrides[ticker];
+            tr.innerHTML = `
+                <td><strong>${ticker}</strong></td>
+                <td><span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.15); color: var(--text-primary);">${cat}</span></td>
+                <td style="text-align: center;">
+                    <button type="button" class="config-override-del-btn" data-ticker="${ticker}" title="Remover override">✕</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.config-override-del-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticker = e.currentTarget.getAttribute('data-ticker');
+                if (ticker && currentAssetOverrides[ticker]) {
+                    delete currentAssetOverrides[ticker];
+                    renderAssetOverridesTable();
+                }
+            });
+        });
+    }
+
+    const btnAddOverride = document.getElementById('btn-add-override');
+    const overrideTickerInput = document.getElementById('config-override-ticker');
+    const overrideClassSelect = document.getElementById('config-override-class');
+
+    if (btnAddOverride && overrideTickerInput && overrideClassSelect) {
+        btnAddOverride.addEventListener('click', () => {
+            const ticker = overrideTickerInput.value.trim().toUpperCase();
+            const cat = overrideClassSelect.value;
+            if (!ticker) {
+                alert('Informe o ticker do ativo (ex: VGIA11).');
+                overrideTickerInput.focus();
+                return;
+            }
+            currentAssetOverrides[ticker] = cat;
+            overrideTickerInput.value = '';
+            renderAssetOverridesTable();
+        });
+    }
+
     // --- Load config on startup ---
     async function loadConfig() {
         try {
             const cfg = await window.api.getConfig();
+            window.appConfig = cfg;
+            currentAssetOverrides = { ...(cfg.asset_class_overrides || {}) };
+            renderAssetOverridesTable();
 
             if (!cfg.is_configured) {
                 openConfigModal(true);
@@ -2685,8 +2959,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Pre-fill form fields
             document.getElementById('config-user-name').value = cfg.user_name || '';
-            document.getElementById('config-excel-path').value = cfg.excel_path || '';
+            document.getElementById('config-excel-path').value = cfg.excel_folder_path || '';
             configProviderInput.value = cfg.ai_provider || 'gemini';
+            if (brapiTokenInput) brapiTokenInput.value = cfg.brapi_token || '';
 
             // Select the right provider button
             document.querySelectorAll('.provider-btn').forEach(b => {
@@ -2722,13 +2997,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Browse Excel File
+    // Browse Excel Folder
     const btnBrowseExcel = document.getElementById('btn-browse-excel');
     if (btnBrowseExcel) {
         btnBrowseExcel.addEventListener('click', async () => {
-            const filePath = await window.api.selectFile({ filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }, { name: 'Todos', extensions: ['*'] }] });
-            if (filePath) {
-                document.getElementById('config-excel-path').value = filePath;
+            const folderPath = await window.api.selectFolder();
+            if (folderPath) {
+                document.getElementById('config-excel-path').value = folderPath;
             }
         });
     }
@@ -2746,7 +3021,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSaveConfig) {
         btnSaveConfig.addEventListener('click', async () => {
             const userName = document.getElementById('config-user-name').value.trim();
-            const excelPath = document.getElementById('config-excel-path').value.trim();
+            const excelFolderPath = document.getElementById('config-excel-path').value.trim();
             const aiProvider = configProviderInput.value;
             const aiKey = document.getElementById('config-ai-key').value.trim();
 
@@ -2759,14 +3034,34 @@ document.addEventListener('DOMContentLoaded', () => {
             btnSaveConfig.disabled = true;
 
             try {
-                const data = await window.api.saveConfig({ user_name: userName, excel_path: excelPath, ai_provider: aiProvider, ai_api_key: aiKey });
+                const brapiToken = brapiTokenInput ? brapiTokenInput.value.trim() : '';
+                const data = await window.api.saveConfig({
+                    user_name: userName,
+                    excel_folder_path: excelFolderPath,
+                    ai_provider: aiProvider,
+                    ai_api_key: aiKey,
+                    brapi_token: brapiToken,
+                    asset_class_overrides: currentAssetOverrides
+                });
 
                 if (data.status === 'success') {
+                    window.appConfig = {
+                        ...(window.appConfig || {}),
+                        user_name: userName,
+                        excel_folder_path: excelFolderPath,
+                        ai_provider: aiProvider,
+                        ai_api_key: aiKey,
+                        brapi_token: brapiToken,
+                        asset_class_overrides: currentAssetOverrides
+                    };
+
                     configModal.classList.add('hidden');
                     showConfigToast('Configurações salvas!');
 
-                    // Reload extrato if path was filled
-                    if (excelPath) {
+                    // Reload/re-render dashboards with new overrides or path
+                    if (window.b3Data && window.b3Data.length > 1) {
+                        renderDashboards();
+                    } else if (excelFolderPath) {
                         loadLocalExtrato();
                     }
 
