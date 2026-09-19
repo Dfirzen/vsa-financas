@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { writeJson } = require('./json-store');
 
 const MAX_MESSAGES_PER_CONVERSATION = 60;
 
@@ -39,14 +40,13 @@ class ConversationsService {
         try {
             return JSON.parse(fs.readFileSync(this._conversationsFile, 'utf-8'));
         } catch (e) {
-            console.error('[ConversationsService] Parse error:', e.message);
-            return { active_id: null, conversations: [] };
+            throw new Error('Histórico de conversas inválido. O arquivo original foi preservado.');
         }
     }
 
     _save(data) {
         this._initPaths();
-        fs.writeFileSync(this._conversationsFile, JSON.stringify(data, null, 2), 'utf-8');
+        writeJson(this._conversationsFile, data);
     }
 
     /**

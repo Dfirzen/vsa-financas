@@ -1,346 +1,219 @@
-/**
- * Market Data Service - Port of market_data_service.py
- * Fetches stock prices, indices, and monthly price history.
- * Uses yahoo-finance2 instead of yfinance, and node-fetch for BCB API.
- */
 const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
-const { configService } = require('./config-service');
+const {writeJson} = require('./json-store');
+const {configService} = require('./config-service');
+const {monthlyClosesFromChart, monthlyReturnsFromCloses} = require('./market-series');
+const QUOTE_TTL = 30 * 60 * 1000;
+const HISTORY_TTL = 24 * 60 * 60 * 1000;
+const validSeries = value => value && Object.keys(value).length > 0 && Object.values(value).every(Number.isFinite);
 
 class MarketDataService {
-    constructor() {
-        const { app } = require('electron');
-        this.basePath = app ? app.getPath('userData') : path.join(require('os').homedir(), 'InvestAI');
-        this.cacheDir = path.join(this.basePath, 'data');
-        this.cacheFile = path.join(this.cacheDir, 'quotes_cache.json');
-
-        if (!fs.existsSync(this.cacheDir)) {
-            fs.mkdirSync(this.cacheDir, { recursive: true });
-        }
-
+    constructor(options = {}) {
+        const app = options.basePath ? null : require('electron').app;
+        this.basePath = options.basePath || (app ? app.getPath('userData') : path.join(require('os').homedir(), 'InvestAI'));
+        this.cacheFile = path.join(this.basePath, 'data', 'quotes_cache.json');
+        this.fetch = options.fetch || fetch;
+        this.getConfig = options.getConfig || (() => configService.getConfig());
+        this.now = options.now || Date.now;
+        this.sleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+        this.requestInterval = options.requestInterval ?? 350;
         this.cache = this._loadCache();
-        this._yahooFinance = null;
+        this.quoteErrors = new Map();
+        this.inFlight = new Map();
+        this.brapiQueue = Promise.resolve();
+        this.historyQueue = Promise.resolve();
+        this.lastBrapiRequest = 0;
+        this.brapiBlockedUntil = 0;
     }
-
-    // --- HELPER: Control Rate Limit ---
-    _delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async _executeWithRetry(apiCallFn, ticker, maxRetries = 2) {
-        let retries = 0;
-        while (retries < maxRetries) {
-            try {
-                return await apiCallFn();
-            } catch (error) {
-                if (retries < maxRetries - 1) {
-                    retries++;
-                    await this._delay(1000);
-                } else {
-                    console.warn(`[API] Falha final ao buscar ${ticker}: ${error.message}`);
-                    throw error;
-                }
-            }
-        }
-        return null;
-    }
-
-    _ensureSuffix(ticker) {
-        if (ticker.endsWith('.SA') || ticker.startsWith('^') || ticker.includes('-')) return ticker;
-        return `${ticker}.SA`;
-    }
-
-    async _getYahooFinance() {
-        if (!this._yahooFinance) {
-            const yf = await import('yahoo-finance2');
-            const YFClass = yf.default || yf;
-            this._yahooFinance = typeof YFClass === 'function' ? new YFClass() : YFClass;
-            // Suppress validation log noise
-            try {
-                this._yahooFinance.suppressNotices(['yahooSurvey', 'cookie']); // Add cookie warnings to suppression
-            } catch (e) { /* ignore */ }
-        }
-        return this._yahooFinance;
-    }
-
     _loadCache() {
-        if (!fs.existsSync(this.cacheFile)) {
-            return {};
-        }
-        try {
-            const data = fs.readFileSync(this.cacheFile, 'utf-8');
-            return JSON.parse(data);
-        } catch (e) {
-            console.error(`Error loading cache: ${e}`);
-            return {};
-        }
+        try { return JSON.parse(fs.readFileSync(this.cacheFile, 'utf8')); }
+        catch { return {}; }
     }
-
     _saveCache() {
-        try {
-            fs.writeFileSync(this.cacheFile, JSON.stringify(this.cache, null, 4), 'utf-8');
-        } catch (e) {
-            console.error(`Error saving cache: ${e}`);
+        try { writeJson(this.cacheFile, this.cache); }
+        catch (error) { console.warn('[Cotações] Não foi possível salvar o cache:', error.message); }
+    }
+    _singleFlight(key, job) {
+        if (this.inFlight.has(key)) return this.inFlight.get(key);
+        const promise = Promise.resolve().then(job).finally(() => this.inFlight.delete(key));
+        this.inFlight.set(key, promise);
+        return promise;
+    }
+    _enqueue(queue, job) {
+        const next = this[queue].then(job);
+        this[queue] = next.catch(() => {});
+        return next;
+    }
+    _fresh(entry, ttl) { return !!entry && this.now() - entry.timestamp * 1000 < ttl; }
+    _tickers(tickers) {
+        if (!Array.isArray(tickers) || tickers.length > 1000) throw new Error('Lista de ativos inválida.');
+        return [...new Set(tickers.map(t => String(t).trim().toUpperCase()).filter(Boolean))];
+    }
+    getQuoteStatus(tickers) {
+        return Object.fromEntries(this._tickers(tickers).map(ticker => {
+            const cached = this.cache[ticker], error = this.quoteErrors.get(ticker);
+            return [ticker, {
+                timestamp: cached?.timestamp || null,
+                stale: !this._fresh(cached, QUOTE_TTL),
+                refreshFailed: !!error,
+                error: error || null,
+                available: Number.isFinite(cached?.price)
+            }];
+        }));
+    }
+    async _requestBrapi(ticker) {
+        const token = this.getConfig().brapi_token;
+        if (!token) throw new Error('Token da Brapi não configurado.');
+        if (this.now() < this.brapiBlockedUntil) throw new Error('Brapi limitou temporariamente as chamadas; tente novamente mais tarde.');
+        const url = `https://brapi.dev/api/quote/${encodeURIComponent(ticker.replace(/\.SA$/i, ''))}?token=${encodeURIComponent(token)}`;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const wait = Math.max(0, this.requestInterval - (this.now() - this.lastBrapiRequest));
+            if (wait) await this.sleep(wait);
+            this.lastBrapiRequest = this.now();
+            let response;
+            try { response = await this.fetch(url, {timeout: 10000, headers: {'User-Agent': 'VSA/5.2'}}); }
+            catch {
+                if (attempt < 2) { await this.sleep(1000 * 2 ** attempt); continue; }
+                throw new Error('Sem conexão com a Brapi.');
+            }
+            if (response.status === 429 || response.status >= 500) {
+                response.body?.resume?.();
+                const retryAfter = response.headers?.get('retry-after');
+                const retryMs = retryAfter ? (/^\d+(\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - this.now()) : 1000 * 2 ** attempt;
+                const delay = Number.isFinite(retryMs) ? Math.max(0, retryMs) : 1000 * 2 ** attempt;
+                if (attempt < 2 && delay <= 30000) { await this.sleep(delay); continue; }
+                if (response.status === 429) this.brapiBlockedUntil = this.now() + Math.max(delay, 30000);
+                throw new Error(response.status === 429 ? 'Limite temporário da Brapi atingido.' : 'Brapi temporariamente indisponível.');
+            }
+            if (!response.ok) throw new Error([401, 403].includes(response.status) ? 'Brapi recusou o acesso: confira token, plano e cota.' : `Brapi retornou HTTP ${response.status}.`);
+            let json;
+            try { json = await response.json(); }
+            catch { throw new Error('Brapi retornou uma resposta inválida.'); }
+            const item = json.results?.[0];
+            if (json.error || !Number.isFinite(item?.regularMarketPrice) || item.regularMarketPrice < 0) throw new Error('Brapi não retornou uma cotação válida para este ativo.');
+            return {price: item.regularMarketPrice, marketTime: item.regularMarketTime || null};
         }
     }
-
-    /**
-     * Get current prices for a list of tickers via brapi.dev API.
-     * Fetches each ticker individually in parallel (respecting free-tier 1-ticker limit).
-     * Falls back to cache on error or when token is not configured.
-     */
+    async _stockPrice(ticker, forceRefresh) {
+        const entry = this.cache[ticker];
+        if (!forceRefresh && this._fresh(entry, QUOTE_TTL) && Number.isFinite(entry.price)) return entry.price;
+        return this._singleFlight('quote:' + ticker, () => this._enqueue('brapiQueue', async () => {
+            try {
+                const quote = await this._requestBrapi(ticker);
+                this.cache[ticker] = {...quote, timestamp: this.now() / 1000, source: 'Brapi'};
+                this.quoteErrors.delete(ticker);
+                this._saveCache();
+                return quote.price;
+            } catch (error) {
+                this.quoteErrors.set(ticker, error.message);
+                console.warn(`[Brapi] ${ticker}: ${error.message} ${this.cache[ticker] ? 'Mantida a última cotação disponível.' : ''}`);
+                return this.cache[ticker]?.price;
+            }
+        }));
+    }
+    async _cryptoPrice(ticker, forceRefresh) {
+        if (!forceRefresh && this._fresh(this.cache[ticker], QUOTE_TTL)) return this.cache[ticker].price;
+        return this._singleFlight('quote:' + ticker, async () => {
+            try {
+                const clean = ticker.replace(/-?BRL$/, '');
+                const response = await this.fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(clean + 'BRL')}`, {timeout: 8000});
+                if (!response.ok) throw new Error();
+                const price = Number((await response.json()).price);
+                if (!Number.isFinite(price) || price <= 0) throw new Error();
+                this.cache[ticker] = {price, timestamp: this.now() / 1000, source: 'Binance'};
+                this.quoteErrors.delete(ticker); this._saveCache();
+                return price;
+            } catch {
+                this.quoteErrors.set(ticker, 'Não foi possível atualizar a cotação da criptomoeda.');
+                return this.cache[ticker]?.price;
+            }
+        });
+    }
     async getPrices(tickers, forceRefresh = false) {
-        const results = {};
-        const toFetch = [];
-
-        for (const ticker of tickers) {
-            const cached = this.cache[ticker];
-            if (cached && !forceRefresh) {
-                if (Date.now() / 1000 - (cached.timestamp || 0) < 900) {
-                    results[ticker] = cached.price;
-                    continue;
-                }
-            }
-            toFetch.push(ticker);
-        }
-
-        if (toFetch.length === 0) return results;
-
-        const token = configService.getConfig().brapi_token || '';
-
-        if (!token) {
-            console.warn('[Brapi] Token não configurado, usando cache.');
-            for (const ticker of toFetch) {
-                if (this.cache[ticker]) results[ticker] = this.cache[ticker].price;
-            }
-            return results;
-        }
-
-        const fetchPromises = toFetch.map(async (ticker) => {
-            const cleanTicker = ticker.replace('.SA', '').trim();
-            const url = `https://brapi.dev/api/quote/${encodeURIComponent(cleanTicker)}?token=${token}`;
-
+        const symbols = this._tickers(tickers);
+        const crypto = new Set(['BTC', 'ETH', 'SOL', 'USDT', 'BNB', 'ADA', 'XRP', 'DOGE', 'AVAX', 'DOT', 'LINK']);
+        const results = await Promise.all(symbols.map(async ticker => {
+            const price = crypto.has(ticker) || /-BRL$/.test(ticker) ? await this._cryptoPrice(ticker, forceRefresh) : await this._stockPrice(ticker, forceRefresh);
+            return [ticker, price];
+        }));
+        return Object.fromEntries(results.filter(([, price]) => Number.isFinite(price)));
+    }
+    _periodYears(period) {
+        const years = Number(String(period).replace(/y$/, ''));
+        if (!Number.isInteger(years) || years < 1 || years > 60) throw new Error('Período histórico inválido.');
+        return years;
+    }
+    async _yahooMonthlyPrices(symbol, period) {
+        return this._singleFlight(`history:${symbol}:${period}`, () => this._enqueue('historyQueue', async () => {
+            const years = this._periodYears(period);
+            const from = Math.floor(Date.UTC(new Date(this.now()).getUTCFullYear() - years, 0, 1) / 1000);
+            const query = new URLSearchParams({period1: String(from), period2: String(Math.floor(this.now() / 1000)), interval: '1d', events: 'history', includeAdjustedClose: 'false'});
+            const response = await this.fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`, {timeout: 15000});
+            if (!response.ok) throw new Error(`Histórico indisponível (HTTP ${response.status}).`);
+            return monthlyClosesFromChart(await response.json());
+        }));
+    }
+    async getMonthlyPrices(tickers, period = '2y', forceRefresh = false) {
+        this._periodYears(period);
+        const pairs = await Promise.all(this._tickers(tickers).map(ticker => this._singleFlight(`monthly:${ticker}:${period}`, async () => {
+            const key = `__monthly_v2_${ticker}_${period}__`;
+            const cached = this.cache[key];
+            if (!forceRefresh && this._fresh(cached, HISTORY_TTL) && validSeries(cached.prices)) return [ticker, cached.prices];
             try {
-                const res = await fetch(url, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
-                    timeout: 8000
-                });
-
-                const json = await res.json();
-
-                if (json.error || json.message) {
-                    console.warn(`[Brapi] Falha ao buscar cotação de ${ticker}: ${json.message || json.error}`);
-                    if (this.cache[ticker]) {
-                        results[ticker] = this.cache[ticker].price;
-                    }
-                    return;
-                }
-
-                const item = json.results && json.results[0];
-                if (item && typeof item.regularMarketPrice === 'number') {
-                    const price = item.regularMarketPrice;
-                    results[ticker] = price;
-                    this.cache[ticker] = {
-                        price,
-                        timestamp: Date.now() / 1000
-                    };
-                } else if (this.cache[ticker]) {
-                    results[ticker] = this.cache[ticker].price;
-                }
-            } catch (e) {
-                console.warn(`[Brapi] Erro de rede ao buscar cotação de ${ticker}: ${e.message}`);
-                if (this.cache[ticker]) {
-                    results[ticker] = this.cache[ticker].price;
-                }
+                const prices = await this._yahooMonthlyPrices(ticker.endsWith('.SA') || ticker.startsWith('^') ? ticker : ticker + '.SA', period);
+                this.cache[key] = {prices, timestamp: this.now() / 1000, source: 'Yahoo Finance'};
+                this._saveCache();
+                return [ticker, prices];
+            } catch (error) {
+                console.warn(`[Histórico] ${ticker}: ${error.message}`);
+                // Empty legacy caches must never suppress a new request.
+                const fallback = cached?.prices || this.cache[`__monthly_${ticker}_${period}__`]?.prices || this.cache[`__monthly_${ticker}__`]?.prices;
+                return [ticker, validSeries(fallback) ? fallback : {}];
             }
+        })));
+        return Object.fromEntries(pairs);
+    }
+    async _bcbSeries(code, period) {
+        const year = new Date(this.now()).getUTCFullYear() - this._periodYears(period);
+        const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${code}/dados?formato=json&dataInicial=01/01/${year}`;
+        const response = await this.fetch(url, {timeout: 15000});
+        if (!response.ok) throw new Error(`Banco Central retornou HTTP ${response.status}.`);
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Série do Banco Central inválida.');
+        const values = {};
+        for (const item of data) {
+            const parts = String(item.data).split('/'), value = Number(item.valor);
+            if (parts.length === 3 && Number.isFinite(value)) values[`${parts[2]}-${parts[1]}`] = value;
+        }
+        if (!validSeries(values)) throw new Error('Banco Central não retornou observações.');
+        return values;
+    }
+    async getIndicesHistory(period = '2y', forceRefresh = false) {
+        this._periodYears(period);
+        return this._singleFlight('indices:' + period, async () => {
+            const sources = {CDI: () => this._bcbSeries(4390, period), IPCA: () => this._bcbSeries(433, period), IBOV: async () => monthlyReturnsFromCloses(await this._yahooMonthlyPrices('^BVSP', period))};
+            const pairs = await Promise.all(Object.entries(sources).map(async ([name, request]) => {
+                const key = `__index_v2_${name}_${period}__`, cached = this.cache[key];
+                if (!forceRefresh && this._fresh(cached, HISTORY_TTL) && validSeries(cached.data)) return [name, cached.data];
+                try {
+                    const data = await request();
+                    if (!validSeries(data)) throw new Error('Série sem observações válidas.');
+                    this.cache[key] = {data, timestamp: this.now() / 1000};
+                    this._saveCache();
+                    return [name, data];
+                } catch (error) {
+                    console.warn(`[Índices] ${name}: ${error.message}`);
+                    const fallback = cached?.data || this.cache.__indices_history__?.data?.[name];
+                    return [name, validSeries(fallback) ? fallback : {}];
+                }
+            }));
+            // Preserve supplementary cached series without blocking the three
+            // main benchmarks on the availability of other providers.
+            const legacy = this.cache.__indices_history__?.data || {};
+            return {...Object.fromEntries(Object.entries(legacy).filter(([k, v]) => !['CDI','IPCA','IBOV'].includes(k) && validSeries(v))), ...Object.fromEntries(pairs)};
         });
-
-        await Promise.all(fetchPromises);
-        this._saveCache();
-        return results;
-    }
-
-    // ========== ÍNDICES DE MERCADO ==========
-
-    async getIndicesHistory() {
-        const cacheKey = '__indices_history__';
-        const cached = this.cache[cacheKey];
-        if (cached && Date.now() / 1000 - (cached.timestamp || 0) < 86400) {
-            return cached.data;
-        }
-
-        const result = {};
-
-        // CDI from BCB (series 4390)
-        result['CDI'] = await this._fetchBcbSeries(4390);
-
-        // IPCA from BCB (series 433)
-        result['IPCA'] = await this._fetchBcbSeries(433);
-
-        // B3 indices via Stooq (free, no API key needed)
-        const stooqIndices = {
-            'IBOV': '^bvsp',
-            'IFIX': 'ifix.in',
-            'IVVB11': 'ivvb11.sa',
-            'SMLL': 'smal11.sa',
-            'IDIV': 'divo11.sa'
-        };
-
-        for (const [name, ticker] of Object.entries(stooqIndices)) {
-            result[name] = await this._fetchStooqMonthlyReturns(ticker);
-        }
-
-        // Cache result
-        this.cache[cacheKey] = { data: result, timestamp: Date.now() / 1000 };
-        this._saveCache();
-
-        return result;
-    }
-
-    async _fetchBcbSeries(seriesCode) {
-        try {
-            const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${seriesCode}/dados?formato=json&dataInicial=01/01/2024`;
-            const resp = await fetch(url, { timeout: 15000 });
-            if (resp.ok) {
-                const data = await resp.json();
-                const result = {};
-                for (const item of data) {
-                    const parts = item.data.split('/');
-                    const key = `${parts[2]}-${parts[1]}`;
-                    result[key] = parseFloat(item.valor);
-                }
-                return result;
-            }
-        } catch (e) {
-            console.error(`Error fetching BCB series ${seriesCode}: ${e.message}`);
-        }
-        return {};
-    }
-
-    /**
-     * Fetch monthly returns via Stooq CSV (free, no key, supports B3 tickers).
-     * URL: https://stooq.com/q/d/l/?s=petr4.sa&i=m
-     */
-    async _fetchStooqMonthlyReturns(symbol) {
-        try {
-            const url = `https://stooq.com/q/d/l/?s=${symbol.toLowerCase()}&i=m`;
-            const resp = await fetch(url, {
-                headers: { 'User-Agent': 'Mozilla/5.0' },
-                timeout: 10000
-            });
-
-            if (!resp.ok) return {};
-
-            const csv = await resp.text();
-            const lines = csv.trim().split('\n');
-            if (lines.length < 2) return {};
-
-            const monthlyCloses = {};
-            for (let i = 1; i < lines.length; i++) {
-                const cols = lines[i].split(',');
-                if (cols.length < 5) continue;
-                const dateStr = cols[0]; // YYYY-MM-DD
-                const closeVal = parseFloat(cols[4]);
-                if (!isNaN(closeVal) && dateStr) {
-                    const key = dateStr.substring(0, 7); // YYYY-MM
-                    monthlyCloses[key] = closeVal;
-                }
-            }
-
-            const sortedMonths = Object.keys(monthlyCloses).sort();
-            const returns = {};
-            for (let i = 1; i < sortedMonths.length; i++) {
-                const prev = monthlyCloses[sortedMonths[i - 1]];
-                const curr = monthlyCloses[sortedMonths[i]];
-                if (prev > 0) {
-                    const pct = ((curr / prev) - 1) * 100;
-                    returns[sortedMonths[i]] = Math.round(pct * 10000) / 10000;
-                }
-            }
-            return returns;
-        } catch (e) {
-            console.warn(`[Stooq] Failed to fetch benchmark ${symbol}: ${e.message}`);
-            return {};
-        }
-    }
-
-    // ========== PREÇOS MENSAIS HISTÓRICOS ==========
-
-    async getMonthlyPrices(tickers, period = '2y') {
-        const results = {};
-        const toFetch = [];
-
-        for (const ticker of tickers) {
-            const cacheKey = `__monthly_${ticker}__`;
-            const cached = this.cache[cacheKey];
-            if (cached && Date.now() / 1000 - (cached.timestamp || 0) < 86400) {
-                results[ticker] = cached.prices;
-            } else {
-                toFetch.push(ticker);
-            }
-        }
-
-        // Parallel fetch via Stooq (free historical CSV)
-        const fetchPromises = toFetch.map(async (ticker) => {
-            const cleanTicker = ticker.replace('.SA', '').toLowerCase();
-            const symbol = `${cleanTicker}.sa`;
-            try {
-                const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d`;
-                const resp = await fetch(url, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
-                    timeout: 10000
-                });
-
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-                const csv = await resp.text();
-                const lines = csv.trim().split('\n');
-                if (lines.length < 2) throw new Error('Empty CSV');
-
-                const prices = {};
-                const years = parseInt(period) || 2;
-                const cutoff = new Date();
-                cutoff.setFullYear(cutoff.getFullYear() - years);
-
-                for (let i = 1; i < lines.length; i++) {
-                    const cols = lines[i].split(',');
-                    if (cols.length < 5) continue;
-                    const dateStr = cols[0]; // YYYY-MM-DD
-                    const closeVal = parseFloat(cols[4]);
-                    const dateObj = new Date(dateStr);
-                    if (!isNaN(closeVal) && dateObj >= cutoff) {
-                        const key = dateStr.substring(0, 7); // YYYY-MM
-                        prices[key] = Math.round(closeVal * 100) / 100;
-                    }
-                }
-
-                results[ticker] = prices;
-                this.cache[`__monthly_${ticker}__`] = {
-                    prices,
-                    timestamp: Date.now() / 1000
-                };
-            } catch (e) {
-                console.warn(`[Stooq] Failed monthly prices for ${ticker}: ${e.message}`);
-                const cacheKey = `__monthly_${ticker}__`;
-                if (this.cache[cacheKey]) {
-                    results[ticker] = this.cache[cacheKey].prices;
-                }
-            }
-        });
-
-        await Promise.all(fetchPromises);
-
-        if (toFetch.length > 0) {
-            this._saveCache();
-        }
-
-        return results;
     }
 }
-
-// Singleton
-const marketDataService = new MarketDataService();
-module.exports = { marketDataService };
-
-
+let singleton;
+module.exports = {MarketDataService, get marketDataService() { return singleton ||= new MarketDataService(); }};

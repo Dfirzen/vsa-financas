@@ -334,7 +334,6 @@ class DividendsService {
             const cached = this._cache[key];
             if (this._isFresh(cached)) {
                 results[key] = cached.value;
-                console.log(`[DividendsService] ${key}: cache hit → ${cached.value}`);
             } else {
                 toFetch.push(key);
             }
@@ -350,7 +349,7 @@ class DividendsService {
                 const value = await this._fetchNextPaymentDate(ticker);
                 results[ticker] = value;
                 this._cache[ticker] = { value, timestamp: Date.now() / 1000 };
-                console.log(`[DividendsService] ${ticker}: fetched → ${value}`);
+                if (value) console.log(`[Proventos] ${ticker}: próximo pagamento em ${value}.`);
             } catch (e) {
                 console.warn(`[DividendsService] Skipping ${ticker}:`, e.message);
                 results[ticker] = this._cache[ticker]?.value ?? null;

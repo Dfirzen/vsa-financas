@@ -2,7 +2,7 @@
  * Electron Main Process
  * Creates the native desktop window and initializes all backend services.
  */
-const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { registerIpcHandlers } = require('./src/ipc-handlers');
@@ -73,7 +73,7 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: false
+            sandbox: true
         }
     });
 
@@ -82,6 +82,8 @@ function createWindow() {
 
     // Load the renderer HTML
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    mainWindow.webContents.on('will-navigate', event => event.preventDefault());
 
     // Show window when content is ready (prevents white flash)
     mainWindow.once('ready-to-show', () => {
@@ -141,6 +143,9 @@ app.whenReady().then(() => {
     });
 
     createWindow();
+}).catch(error => {
+    dialog.showErrorBox('Não foi possível iniciar o VS&A', error.message + '\nOs arquivos de dados foram preservados.');
+    app.quit();
 });
 
 // Handle second instance (focus existing window)

@@ -60,3 +60,15 @@ desktop.ini
 # ========================
 *.log
 logs/
+renderer/vendor/
+test-results/
+dist-review/
+dist-*/
+*.before-redesign.json
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+.npmrc

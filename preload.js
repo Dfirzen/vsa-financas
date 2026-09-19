@@ -3,6 +3,11 @@
  * Exposes a safe API via contextBridge.
  */
 const { contextBridge, ipcRenderer } = require('electron');
+const subscribe = (channel, callback) => {
+    const listener = (_event, ...args) => callback(...args);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+};
 
 contextBridge.exposeInMainWorld('api', {
     // Config
@@ -16,13 +21,13 @@ contextBridge.exposeInMainWorld('api', {
     deleteMeta: (id) => ipcRenderer.invoke('delete-meta', id),
 
     // Extrato
-    getExtratoFile: () => ipcRenderer.invoke('get-extrato-file'),
     getExtratoFiles: () => ipcRenderer.invoke('get-extrato-files'),
 
     // Market Data
     getQuotes: (tickers, force) => ipcRenderer.invoke('get-quotes', tickers, force),
-    getIndices: () => ipcRenderer.invoke('get-indices'),
-    getMonthlyPrices: (tickers, period) => ipcRenderer.invoke('get-monthly-prices', tickers, period),
+    getQuoteStatus: (tickers) => ipcRenderer.invoke('get-quote-status', tickers),
+    getIndices: (period, force) => ipcRenderer.invoke('get-indices', period, force),
+    getMonthlyPrices: (tickers, period, force) => ipcRenderer.invoke('get-monthly-prices', tickers, period, force),
     getNextDividends: (tickers) => ipcRenderer.invoke('get-next-dividends', tickers),
 
     // AI
@@ -56,12 +61,11 @@ contextBridge.exposeInMainWorld('api', {
     getSystemTheme: () => ipcRenderer.invoke('get-system-theme'),
 
     // Auto Updater
-    onUpdateAvailable: (callback) => ipcRenderer.on('updater:update-available', callback),
-    onDownloadProgress: (callback) => ipcRenderer.on('updater:download-progress', (event, percent) => callback(percent)),
-    onUpdateDownloaded: (callback) => ipcRenderer.on('updater:update-downloaded', callback),
-    onUpdateNotAvailable: (callback) => ipcRenderer.on('updater:update-not-available', callback),
-    onUpdaterError: (callback) => ipcRenderer.on('updater:error', (event, message) => callback(message)),
+    onUpdateAvailable: (callback) => subscribe('updater:update-available', callback),
+    onDownloadProgress: (callback) => subscribe('updater:download-progress', callback),
+    onUpdateDownloaded: (callback) => subscribe('updater:update-downloaded', callback),
+    onUpdateNotAvailable: (callback) => subscribe('updater:update-not-available', callback),
+    onUpdaterError: (callback) => subscribe('updater:error', callback),
     quitAndInstallUpdate: () => ipcRenderer.send('updater:quit-and-install'),
     checkForUpdates: () => ipcRenderer.invoke('updater:check')
 });
-

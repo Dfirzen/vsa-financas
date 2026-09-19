@@ -4,22 +4,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https://fonts.googleapis.com https://fonts.gstatic.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
     <title>V S & A — Visão, Solidez & Autonomia</title>
     <!-- Google Fonts: Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="vendor/chart.umd.js"></script>
+    <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
     <!-- SheetJS (XLSX) -->
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="vendor/xlsx.full.min.js"></script>
     <!-- Marked.js for Markdown parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="vendor/marked.umd.js"></script>
     <!-- GSAP for Antigravity buttery smooth animations -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="vendor/gsap.min.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="goals.css">
+    <link rel="stylesheet" href="responsive.css">
 </head>
 
 <body>
@@ -48,12 +47,18 @@
                 <input type="hidden" id="edit-meta-id">
                 <div class="form-group">
                     <label>Título da Meta</label>
-                    <input type="text" id="edit-meta-name" class="modal-input">
+                    <input type="text" id="edit-meta-name" class="modal-input" maxlength="200" aria-label="Título da meta">
                 </div>
                 <div class="form-group">
                     <label>Valor Objetivo (R$)</label>
-                    <input type="number" id="edit-meta-target" class="modal-input" step="100">
+                    <input type="number" id="edit-meta-target" class="modal-input" step="0.01" min="0.01" aria-label="Valor objetivo">
                 </div>
+                <div class="form-group"><label for="edit-meta-kind">Como quero acompanhar</label><select id="edit-meta-kind" class="modal-input"><option value="recurring">Compromisso mensal</option><option value="annual">Objetivo anual</option><option value="milestone">Marco de longo prazo</option></select></div>
+                <div class="form-group"><label for="edit-meta-metric">O que medir</label><select id="edit-meta-metric" class="modal-input"><option value="purchases">Compras registradas na B3</option><option value="income">Renda mensal média de proventos</option><option value="wealth">Patrimônio importado a mercado</option><option value="manual">Valor que eu informo</option></select></div>
+                <div class="form-group" id="goal-year-field"><label for="edit-meta-year">Ano do objetivo</label><input id="edit-meta-year" class="modal-input" type="number" min="2000" max="2100"></div>
+                <div class="form-group" id="goal-start-field"><label for="edit-meta-start">Mês de início do compromisso (1 a 12)</label><input id="edit-meta-start" class="modal-input" type="number" min="1" max="12" value="1"></div>
+                <div class="form-group" id="goal-current-field"><label for="edit-meta-current">Progresso registrado (R$; acumulado no período)</label><input id="edit-meta-current" class="modal-input" type="number" min="0" step="0.01" value="0"></div>
+                <p id="goal-editor-hint" class="goal-note"></p><p id="goal-editor-error" role="alert"></p>
             </div>
             <div class="modal-actions">
                 <button class="btn-outline btn-sm" id="btn-cancel-meta">Cancelar</button>
@@ -297,9 +302,9 @@
         </div>
     </div>
     <div class="app-container">
-        <!-- Top Navigation -->
-        <header class="top-nav">
-            <div class="nav-left">
+        <!-- Sidebar Lateral Executiva -->
+        <aside class="app-sidebar" id="app-sidebar">
+            <div class="sidebar-header">
                 <div class="logo">
                     <div class="logo-icon vsa-logo-icon">
                         <img src="Icone.png" alt="V S & A" class="vsa-icon-img" />
@@ -309,61 +314,304 @@
                         <span class="vsa-subtitle"><strong>V</strong>isão, <strong>S</strong>olidez <span class="vsa-amp-sub">&</span> <strong>A</strong>utonomia</span>
                     </div>
                 </div>
-                <nav class="main-menu">
-                    <button class="nav-item active" data-target="visao-geral">📊 Resumo</button>
-                    <button class="nav-item" data-target="proventos">💰 Proventos</button>
-                    <button class="nav-item" data-target="patrimonio">🏦 Patrimônio</button>
-                    <button class="nav-item" data-target="rentabilidade">📈 Rentabilidade</button>
-                    <button class="nav-item" data-target="metas">🎯 Metas</button>
-                    <button class="nav-item" data-target="analise">🤖 Análise</button>
-                    <button class="nav-item" data-target="ir-control" id="nav-ir">📋 IR</button>
-                </nav>
             </div>
 
-            <div class="nav-right">
-                <div class="upload-wrapper">
-                    <button class="nav-btn btn-outline" id="btn-upload-label">
-                        <span class="icon">📁</span> Importar arquivo avulso
+            <nav class="sidebar-menu">
+                <!-- Visão Executiva (Cockpit Consolidado) -->
+                <button class="sidebar-item nav-item active" data-target="visao-executiva" id="nav-btn-executiva">
+                    <span class="sidebar-icon">📊</span>
+                    <span class="sidebar-label">Visão Executiva</span>
+                    <span class="sidebar-badge-pro">Exec</span>
+                </button>
+
+                <!-- Grupo Expansível: Meus Investimentos -->
+                <div class="sidebar-group open" id="group-meus-investimentos">
+                    <button class="sidebar-group-header" id="btn-toggle-investimentos" type="button">
+                        <span class="sidebar-icon">📂</span>
+                        <span class="sidebar-label">Meus Investimentos</span>
+                        <span class="sidebar-chevron">▾</span>
                     </button>
-                    <input type="file" id="excel-upload" accept=".xlsx" title="Importar arquivo avulso">
+                    <div class="sidebar-submenu">
+                        <button class="sidebar-subitem nav-item" data-target="visao-geral" title="Fundos Imobiliários">
+                            <span class="subitem-bullet fii-bullet">🏢</span>
+                            <span class="subitem-label">Fundos Imobiliários</span>
+                        </button>
+                        <button class="sidebar-subitem nav-item" data-target="screen-acoes" title="Ações">
+                            <span class="subitem-bullet acoes-bullet">📈</span>
+                            <span class="subitem-label">Ações</span>
+                        </button>
+                        <button class="sidebar-subitem nav-item" data-target="screen-etfs" title="ETFs">
+                            <span class="subitem-bullet etfs-bullet">🌐</span>
+                            <span class="subitem-label">ETFs</span>
+                        </button>
+                        <button class="sidebar-subitem nav-item" data-target="screen-renda-fixa" title="Renda Fixa">
+                            <span class="subitem-bullet rf-bullet">🏦</span>
+                            <span class="subitem-label">Renda Fixa</span>
+                        </button>
+                        <button class="sidebar-subitem nav-item" data-target="screen-cripto" title="Criptomoedas">
+                            <span class="subitem-bullet cripto-bullet">🪙</span>
+                            <span class="subitem-label">Criptomoedas</span>
+                        </button>
+                    </div>
                 </div>
-                <select class="nav-btn btn-outline" id="global-year-filter" style="min-width: 90px; appearance: auto; cursor: pointer; border-radius: 6px; padding: 6px 12px; font-weight: 500;">
-                    <!-- Preenchido via JS -->
-                </select>
-                <button class="nav-btn btn-outline" id="btn-refresh-quotes">
-                    <span class="icon">🔄</span> Atualizar Cotações
-                </button>
-                <button class="nav-btn btn-outline" id="btn-theme-toggle" title="Alternar Tema Claro/Escuro">
-                    <span class="icon" id="theme-icon">☀️</span>
-                </button>
-                <button class="nav-btn btn-outline" id="btn-open-config" title="Configurações">
-                    <span class="icon">⚙️</span>
-                </button>
-            </div>
-        </header>
 
-        <!-- Auto-Update Banner -->
-        <div id="update-banner" class="update-banner">
-            <div class="update-banner-content">
-                <span class="update-icon" id="update-icon">⬇️</span>
-                <div class="update-info">
-                    <span class="update-title" id="update-title">Nova versão disponível! Baixando atualização...</span>
-                    <div class="update-progress-track" id="update-progress-track">
-                        <div class="update-progress-fill" id="update-progress-fill" style="width: 0%;"></div>
+                <div class="sidebar-divider"></div>
+
+                <!-- Módulos Adicionais -->
+                <button class="sidebar-item nav-item" data-target="metas">
+                    <span class="sidebar-icon">🎯</span>
+                    <span class="sidebar-label">Metas</span>
+                </button>
+                <button class="sidebar-item nav-item" data-target="simulador"><span class="sidebar-icon">📈</span><span class="sidebar-label">Simulador</span></button>
+                <button class="sidebar-item nav-item" data-target="analise">
+                    <span class="sidebar-icon">🤖</span>
+                    <span class="sidebar-label">Análise · Kaguya</span>
+                    <span class="sidebar-badge-ai">AI</span>
+                </button>
+                <button class="sidebar-item nav-item" data-target="ir-control" id="nav-ir">
+                    <span class="sidebar-icon">📋</span>
+                    <span class="sidebar-label">Imposto de Renda</span>
+                </button>
+            </nav>
+
+            <!-- Rodapé com Usuário Diego -->
+            <div class="sidebar-footer">
+                <div class="user-profile-widget" id="btn-sidebar-profile" title="Abrir Configurações de Perfil">
+                    <div class="user-avatar">👤</div>
+                    <div class="user-info">
+                        <span class="user-name" id="sidebar-user-name">Diego</span>
+                        <span class="user-status">● Carteira Ativa</span>
                     </div>
                 </div>
             </div>
-            <div class="update-actions">
-                <button class="btn-outline btn-sm" id="btn-update-dismiss">Dispensar</button>
-                <button class="btn-primary btn-sm hidden" id="btn-update-restart">Reiniciar agora</button>
-            </div>
-        </div>
+        </aside>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Tela 1: Resumo -->
-            <section id="visao-geral" class="screen active">
-                <div class="dashboard-grid">
+        <!-- Wrapper da Área Principal de Conteúdo -->
+        <div class="app-main-wrapper">
+            <!-- Barra Superior Executiva (Top Bar) -->
+            <header class="app-topbar">
+                <div class="topbar-left">
+                    <h1 class="page-title" id="page-current-title">Visão Executiva</h1>
+                    <span class="page-subtitle" id="page-current-subtitle">Cockpit Patrimonial Consolidado</span>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="upload-wrapper">
+                        <button class="nav-btn btn-outline" id="btn-upload-label">
+                            <span class="icon">📁</span> Importar extrato B3
+                        </button>
+                        <input type="file" id="excel-upload" accept=".xlsx" title="Importar extrato anual B3">
+                    </div>
+                    <select class="nav-btn btn-outline" id="global-year-filter" style="min-width: 90px; appearance: auto; cursor: pointer; border-radius: 6px; padding: 6px 12px; font-weight: 500;">
+                        <!-- Preenchido via JS -->
+                    </select>
+                    <button class="nav-btn btn-outline" id="btn-refresh-quotes" title="Atualizar cotações do mercado">
+                        <span class="icon">🔄</span> Atualizar Cotações
+                    </button>
+                    <button class="nav-btn btn-outline" id="btn-theme-toggle" title="Alternar Tema Claro/Escuro">
+                        <span class="icon" id="theme-icon">☀️</span>
+                    </button>
+                    <button class="nav-btn btn-outline" id="btn-open-config" title="Configurações">
+                        <span class="icon">⚙️</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Auto-Update Banner -->
+            <div id="update-banner" class="update-banner">
+                <div class="update-banner-content">
+                    <span class="update-icon" id="update-icon">⬇️</span>
+                    <div class="update-info">
+                        <span class="update-title" id="update-title">Nova versão disponível! Baixando atualização...</span>
+                        <div class="update-progress-track" id="update-progress-track">
+                            <div class="update-progress-fill" id="update-progress-fill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="update-actions">
+                    <button class="btn-outline btn-sm" id="btn-update-dismiss">Dispensar</button>
+                    <button class="btn-primary btn-sm hidden" id="btn-update-restart">Reiniciar agora</button>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <main class="main-content">
+                <!-- ==============================================
+                     TELA 0: VISÃO EXECUTIVA (HOME CONSOLIDADA)
+                     ============================================== -->
+                <section id="visao-executiva" class="screen active">
+                    <div class="exec-bento-grid">
+                        <!-- Linha 1: Cards Executivos de Alta Densidade (KPIs) -->
+                        <div class="exec-kpi-row">
+                            <!-- Card 1: Patrimônio Total Consolidado -->
+                            <div class="exec-kpi-card">
+                                <div class="exec-kpi-header">
+                                    <span class="exec-kpi-label">Patrimônio Consolidado</span>
+                                    <span class="exec-kpi-icon">💎</span>
+                                </div>
+                                <div class="exec-kpi-value-row">
+                                    <span class="exec-kpi-value" id="exec-patrimonio-total">R$ 0,00</span>
+                                </div>
+                                <div class="exec-kpi-subtext">
+                                    <span class="exec-badge-pill positive" id="exec-patrimonio-var">+0,00%</span>
+                                    <span>valorização das posições, sem proventos</span>
+                                </div>
+                            </div>
+
+                            <!-- Card 2: Retorno Global da Carteira -->
+                            <div class="exec-kpi-card retorno-card">
+                                <div class="exec-kpi-header">
+                                    <span class="exec-kpi-label">Retorno acumulado · VS&A</span>
+                                    <span class="exec-kpi-icon">📈</span>
+                                </div>
+                                <div class="exec-kpi-value-row">
+                                    <span class="exec-kpi-value" id="exec-retorno-pct">0,00%</span>
+                                </div>
+                                <div class="exec-kpi-subtext" id="exec-retorno-sub">
+                                    <span>Estimativa com proventos · </span>
+                                    <strong style="color: #60A5FA;" id="exec-cdi-comparativo">+0,0%</strong>
+                                </div>
+                            </div>
+
+                            <!-- Card 3: Lucro Acumulado Total -->
+                            <div class="exec-kpi-card lucro-card">
+                                <div class="exec-kpi-header">
+                                    <span class="exec-kpi-label">Resultado em reais</span>
+                                    <span class="exec-kpi-icon">💰</span>
+                                </div>
+                                <div class="exec-kpi-value-row">
+                                    <span class="exec-kpi-value" id="exec-lucro-total">R$ 0,00</span>
+                                </div>
+                                <div class="exec-kpi-subtext" id="exec-lucro-sub">
+                                    <span>Valorização + resultado de vendas + proventos</span>
+                                </div>
+                            </div>
+
+                            <!-- Card 4: Health Score da Carteira -->
+                            <div class="exec-kpi-card health-card">
+                                <div class="exec-kpi-header">
+                                    <span class="exec-kpi-label">Ativos na Carteira</span>
+                                    <span class="exec-kpi-icon">🛡️</span>
+                                </div>
+                                <div class="health-score-container">
+                                    <div class="health-score-circle">
+                                        <span class="health-score-num" id="exec-health-num">0</span>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight: 700; font-size: 0.95rem;" id="exec-health-status">Ativos cadastrados</div>
+                                        <span style="font-size: 0.72rem; color: var(--text-tertiary);">Contagem de ativos importados e manuais</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="exec-kpi-row">
+                            <div class="exec-kpi-card"><span class="exec-kpi-label">Valor investido nas posições</span><div class="exec-kpi-value" id="exec-investido-total">—</div><div class="exec-kpi-subtext">Custo de aquisição das unidades que você ainda possui; compras não são lucro.</div></div>
+                            <div class="exec-kpi-card"><span class="exec-kpi-label">Valorização em reais</span><div class="exec-kpi-value" id="exec-valorizacao-total">—</div><div class="exec-kpi-subtext">Valor de mercado menos custo das posições.</div></div>
+                            <div class="exec-kpi-card"><span class="exec-kpi-label">Proventos do extrato</span><div class="exec-kpi-value" id="exec-proventos-total">—</div><div class="exec-kpi-subtext">Recebidos no ano selecionado; “Todos” inclui todo o histórico.</div></div>
+                            <div class="exec-kpi-card"><span class="exec-kpi-label">Proventos do último mês importado</span><div class="exec-kpi-value" id="exec-proventos-mes">—</div><div class="exec-kpi-subtext" id="exec-importacao-status">—</div></div>
+                        </div>
+                        <!-- Linha 2: Gráfico de Benchmarks (8 cols) + Alocação de Ativos (4 cols) -->
+                        <div class="exec-charts-row">
+                            <!-- Gráfico de Rentabilidade vs CDI & Ibovespa -->
+                            <div class="exec-chart-card">
+                                <div class="exec-chart-header">
+                                    <div class="exec-chart-title">
+                                        <span>📈 Rentabilidade acumulada · VS&A vs. índices</span>
+                                    </div>
+                                    <div class="exec-period-pills" id="exec-period-filters">
+                                        <button class="exec-period-btn" data-period="1M">1M</button>
+                                        <button class="exec-period-btn" data-period="6M">6M</button>
+                                        <button class="exec-period-btn" data-period="1A">1A</button>
+                                        <button class="exec-period-btn active" data-period="YTD">YTD</button>
+                                        <button class="exec-period-btn" data-period="ALL">Total</button>
+                                    </div>
+                                </div>
+                                <div class="exec-chart-canvas-wrapper">
+                                    <canvas id="execRentabilidadeChart"></canvas>
+                                </div>
+                                <p id="exec-benchmark-status" style="font-size: 0.75rem; color: var(--text-secondary); padding: 0 16px 12px; line-height: 1.5;">Carregando histórico da carteira, CDI, Ibovespa e IPCA...</p>
+                                <details style="padding: 0 16px 16px; font-size: .8rem;">
+                                    <summary>Conferir compras, proventos e resultado mês a mês</summary>
+                                    <p>Resultado = posição final − posição inicial − compras + vendas + proventos. Compras aumentam o patrimônio, mas não o resultado. O percentual mensal usa o capital ponderado pelas datas (Modified Dietz); o acumulado compõe esses percentuais. É uma estimativa com fechamentos mensais, não o lucro em reais dividido pelo custo atual. A série considera apenas ativos com movimentações importadas, sem saldo em conta ou ativos manuais. O primeiro mês começa na primeira compra; os índices usam o mês completo.</p>
+                                    <div style="overflow-x: auto;"><table class="exec-mini-table"><thead><tr><th>Mês</th><th>Posição inicial</th><th>Compras</th><th>Vendas</th><th>Proventos</th><th>Posição final</th><th>Resultado</th><th>No mês</th><th>Acumulado</th></tr></thead><tbody id="exec-performance-audit"></tbody></table></div>
+                                </details>
+                            </div>
+
+                            <!-- Gráfico de Alocação por Classe de Ativos (Donut) -->
+                            <div class="exec-chart-card">
+                                <div class="exec-chart-header">
+                                    <div class="exec-chart-title">
+                                        <span>🥧 Alocação por Ativos</span>
+                                    </div>
+                                </div>
+                                <div class="exec-donut-wrapper">
+                                    <canvas id="execAlocacaoChart"></canvas>
+                                </div>
+                                <div class="exec-donut-legend" id="exec-donut-legend">
+                                    <!-- Preenchido via JS -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Linha 3: Destaques de Performance & Alocação Estratégica -->
+                        <div class="exec-bottom-row">
+                            <!-- Melhores Performances / Maiores Posições -->
+                            <div class="exec-highlights-card">
+                                <div class="exec-chart-header" style="margin-bottom: 8px;">
+                                    <span class="exec-chart-title">🏆 Maiores Posições da Carteira</span>
+                                    <button class="btn-outline btn-sm" id="btn-view-all-positions" style="font-size: 0.75rem;">Ver Todos</button>
+                                </div>
+                                <div class="exec-table-scroll" tabindex="0" role="region" aria-label="Maiores posições da carteira">
+                                <table class="exec-mini-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ativo</th>
+                                            <th>Classe</th>
+                                            <th>Valor de mercado</th>
+                                            <th>Peso %</th>
+                                            <th title="Variação do preço sobre o custo médio; não inclui proventos.">Valorização das cotas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="exec-top-assets-tbody">
+                                        <!-- Preenchido via JS -->
+                                    </tbody>
+                                </table>
+                                </div>
+                            </div>
+
+                            <!-- Saúde & Rebalanceamento Estratégico -->
+                            <div class="exec-highlights-card">
+                                <div class="exec-chart-header" style="margin-bottom: 8px;">
+                                    <span class="exec-chart-title">⚖️ Rebalanceamento Sugerido</span>
+                                    <span class="sidebar-badge-pro" style="background: rgba(59, 130, 246, 0.2); color: #60A5FA;">Estratégia</span>
+                                </div>
+                                <div id="exec-rebalance-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;">
+                                    <!-- Preenchido via JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==============================================
+                     TELA 1: FUNDOS IMOBILIÁRIOS (FIIs)
+                     ============================================== -->
+                <section id="visao-geral" class="screen">
+                    <!-- Sub-barra com abas dedicadas de FIIs -->
+                    <div class="fii-subnav-bar">
+                        <div class="fii-subnav-title">
+                            <span>🏢 Fundos Imobiliários</span>
+                            <span class="sidebar-badge-pro">Módulo FII</span>
+                        </div>
+                        <div class="fii-subnav-tabs">
+                            <button class="fii-tab-btn active" data-fii-tab="visao-geral">📊 Resumo</button>
+                            <button class="fii-tab-btn" data-fii-tab="proventos">💰 Proventos</button>
+                            <button class="fii-tab-btn" data-fii-tab="patrimonio">🏦 Patrimônio</button>
+                            <button class="fii-tab-btn" data-fii-tab="rentabilidade">📈 Rentabilidade</button>
+                        </div>
+                    </div>
+                    <div class="dashboard-grid">
 
                     <!-- KPI Cards (4 columns) -->
                     <div class="summary-cards-row">
@@ -486,7 +734,7 @@
                             <span id="proactive-rights-text">Você possui direito(s) de subscrição na carteira. Verifique os prazos de vencimento na sua corretora.</span>
                         </div>
                         <div class="proactive-alert-actions">
-                            <button class="btn-sm btn-outline proactive-scroll-btn" onclick="document.getElementById('assets-list-container').scrollIntoView({behavior: 'smooth', block: 'start'})">Ver detalhes</button>
+                            <button class="btn-sm btn-outline proactive-scroll-btn" data-action="show-assets">Ver detalhes</button>
                             <button class="btn-sm btn-outline proactive-dismiss-btn" id="btn-dismiss-rights">Dispensar</button>
                         </div>
                     </div>
@@ -543,6 +791,19 @@
 
             <!-- Tela 2: Proventos -->
             <section id="proventos" class="screen">
+                <!-- Sub-barra com abas dedicadas de FIIs -->
+                <div class="fii-subnav-bar">
+                    <div class="fii-subnav-title">
+                        <span>🏢 Fundos Imobiliários</span>
+                        <span class="sidebar-badge-pro">Módulo FII</span>
+                    </div>
+                    <div class="fii-subnav-tabs">
+                        <button class="fii-tab-btn" data-fii-tab="visao-geral">📊 Resumo</button>
+                        <button class="fii-tab-btn active" data-fii-tab="proventos">💰 Proventos</button>
+                        <button class="fii-tab-btn" data-fii-tab="patrimonio">🏦 Patrimônio</button>
+                        <button class="fii-tab-btn" data-fii-tab="rentabilidade">📈 Rentabilidade</button>
+                    </div>
+                </div>
                 <div class="proventos-layout">
                     
                     <!-- Left Sidebar (Resumo) -->
@@ -687,6 +948,19 @@
                 </div>
             </section>
             <section id="patrimonio" class="screen">
+                <!-- Sub-barra com abas dedicadas de FIIs -->
+                <div class="fii-subnav-bar">
+                    <div class="fii-subnav-title">
+                        <span>🏢 Fundos Imobiliários</span>
+                        <span class="sidebar-badge-pro">Módulo FII</span>
+                    </div>
+                    <div class="fii-subnav-tabs">
+                        <button class="fii-tab-btn" data-fii-tab="visao-geral">📊 Resumo</button>
+                        <button class="fii-tab-btn" data-fii-tab="proventos">💰 Proventos</button>
+                        <button class="fii-tab-btn active" data-fii-tab="patrimonio">🏦 Patrimônio</button>
+                        <button class="fii-tab-btn" data-fii-tab="rentabilidade">📈 Rentabilidade</button>
+                    </div>
+                </div>
                 <div class="dashboard-grid">
 
                     <!-- SEÇÃO 1 — KPIs (4 colunas) -->
@@ -807,6 +1081,19 @@
                 </div>
             </section>
             <section id="rentabilidade" class="screen">
+                <!-- Sub-barra com abas dedicadas de FIIs -->
+                <div class="fii-subnav-bar">
+                    <div class="fii-subnav-title">
+                        <span>🏢 Fundos Imobiliários</span>
+                        <span class="sidebar-badge-pro">Módulo FII</span>
+                    </div>
+                    <div class="fii-subnav-tabs">
+                        <button class="fii-tab-btn" data-fii-tab="visao-geral">📊 Resumo</button>
+                        <button class="fii-tab-btn" data-fii-tab="proventos">💰 Proventos</button>
+                        <button class="fii-tab-btn" data-fii-tab="patrimonio">🏦 Patrimônio</button>
+                        <button class="fii-tab-btn active" data-fii-tab="rentabilidade">📈 Rentabilidade</button>
+                    </div>
+                </div>
                 <div class="rentab-layout">
                     <!-- Sidebar KPIs -->
                     <aside class="rentab-sidebar">
@@ -862,7 +1149,7 @@
                     <!-- Main Chart Area -->
                     <div class="card rentab-chart-card">
                         <div class="card-header">
-                            <h3>Rentabilidade comparada com índices</h3>
+                            <h3>Rentabilidade estimada comparada com índices</h3>
                             <div class="filter-group">
                                 <select class="select-sm" id="rentab-period-filter">
                                     <option value="inicio">📅 Desde o início</option>
@@ -875,6 +1162,7 @@
                                 </select>
                             </div>
                         </div>
+                        <p style="padding: 0 16px; color: var(--text-secondary); font-size: 0.8rem">Estimativa mensal pelo método Modified Dietz, incluindo proventos. Não inclui saldo em conta. — indica histórico ou cotação insuficiente.</p>
                         <!-- Legend -->
                         <div class="rentab-legend" id="rentab-legend">
                             <span class="rentab-legend-item"><span class="rentab-dot" style="background:#3B82F6;"></span>Rentabilidade</span>
@@ -937,33 +1225,7 @@
                     </div>
                 </div>
             </section>
-            <section id="metas" class="screen">
-                <!-- Metas em andamento -->
-                <div class="metas-header-main">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <h2 class="metas-section-title" style="margin-bottom: 0;">Metas em andamento</h2>
-                        <select class="select-sm" id="metas-year-selector" style="font-size: 0.95rem; padding: 4px 24px 4px 10px; background-color: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; cursor: pointer;">
-                            <option value="2026">2026</option>
-                        </select>
-                    </div>
-                    <button class="btn-outline btn-sm" id="btn-create-meta">+ Criar nova meta</button>
-                </div>
-                <div class="dashboard-grid" id="metas-em-andamento">
-                    <div style="text-align: center; color: var(--text-secondary); padding: 40px;">
-                        Carregando metas...
-                    </div>
-                </div>
-
-                <!-- Metas concluídas -->
-                <div class="metas-header-main mt-32">
-                    <h2 class="metas-section-title">Metas concluídas 🎉</h2>
-                </div>
-                <div class="dashboard-grid" id="metas-concluidas">
-                    <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                        Nenhuma meta concluída ainda.
-                    </div>
-                </div>
-            </section>
+            <section id="metas" class="screen"><p>Carregando seu plano...</p></section>
             <section id="analise" class="screen">
                 <!-- AI Not Configured Warning -->
                 <div id="ai-setup-banner" class="ai-setup-banner hidden">
@@ -974,7 +1236,24 @@
                     </div>
                 </div>
 
-                <!-- Simulador de Aportes Section -->
+                <!-- Auto Analysis Section: Ativos vs Metas -->
+                <div class="card ai-analysis-card mt-24">
+                    <div class="card-header">
+                        <h3>🤖 Análise Inteligente: Ativos vs Metas</h3>
+                        <div class="filter-group">
+                            <button class="btn-outline btn-sm" id="btn-regenerate-analysis">🔄 Gerar Análise</button>
+                        </div>
+                    </div>
+                    <div class="ai-analysis-content" id="ai-analysis-content">
+                        <div class="ai-empty-state">
+                            <div class="ai-empty-icon">🎯</div>
+                            <p>O que acha de ver o alinhamento da sua carteira com as suas metas? Clique em <strong>"Gerar Análise"</strong> para receber insights da IA.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+<section id="simulador" class="screen"><p class="goal-context">Simulação com as premissas que você escolher. Não prevê o retorno da carteira e funciona sem IA.</p>                <!-- Simulador de Aportes Section -->
                 <div class="card simulador-card">
                     <div class="card-header">
                         <h3>📈 Simulador de Aportes</h3>
@@ -1055,23 +1334,8 @@
                     </div>
                 </div>
 
-                <!-- Auto Analysis Section: Ativos vs Metas -->
-                <div class="card ai-analysis-card mt-24">
-                    <div class="card-header">
-                        <h3>🤖 Análise Inteligente: Ativos vs Metas</h3>
-                        <div class="filter-group">
-                            <button class="btn-outline btn-sm" id="btn-regenerate-analysis">🔄 Gerar Análise</button>
-                        </div>
-                    </div>
-                    <div class="ai-analysis-content" id="ai-analysis-content">
-                        <div class="ai-empty-state">
-                            <div class="ai-empty-icon">🎯</div>
-                            <p>O que acha de ver o alinhamento da sua carteira com as suas metas? Clique em <strong>"Gerar Análise"</strong> para receber insights da IA.</p>
-                        </div>
-                    </div>
-                </div>
+</section>
 
-            </section>
 
             <!-- =============================================
                  CONTROLE DE IR
@@ -1084,14 +1348,14 @@
                         <div class="card ir-kpi-card">
                             <div class="ir-kpi-icon">📈</div>
                             <div class="ir-kpi-body">
-                                <span class="ir-kpi-label">Ganho Líquido no Ano</span>
+                                <span class="ir-kpi-label">Resultado bruto registrado (filtro)</span>
                                 <span class="ir-kpi-value positive" id="ir-kpi-ganho-ano">R$ 0,00</span>
                             </div>
                         </div>
                         <div class="card ir-kpi-card">
                             <div class="ir-kpi-icon">💸</div>
                             <div class="ir-kpi-body">
-                                <span class="ir-kpi-label">IR Total Apurado (Ano)</span>
+                                <span class="ir-kpi-label">Imposto pago informado (filtro)</span>
                                 <span class="ir-kpi-value" id="ir-kpi-ir-ano">R$ 0,00</span>
                             </div>
                         </div>
@@ -1100,7 +1364,7 @@
                             <div class="ir-kpi-body">
                                 <span class="ir-kpi-label">DARF do Mês Atual</span>
                                 <span class="ir-kpi-value" id="ir-kpi-darf-mes">R$ 0,00</span>
-                                <span class="ir-kpi-sub" id="ir-kpi-darf-venc">Vence último dia útil do mês</span>
+                                <span class="ir-kpi-sub" id="ir-kpi-darf-venc">Apuração automática indisponível</span>
                             </div>
                         </div>
                         <div class="card ir-kpi-card">
@@ -1108,7 +1372,7 @@
                             <div class="ir-kpi-body">
                                 <span class="ir-kpi-label">Prejuízo Acumulado</span>
                                 <span class="ir-kpi-value negative" id="ir-kpi-prejuizo">R$ 0,00</span>
-                                <span class="ir-kpi-sub">Compensável em meses futuros</span>
+                                <span class="ir-kpi-sub">Saldo fiscal não apurado</span>
                             </div>
                         </div>
                     </div>
@@ -1135,27 +1399,12 @@
                     <!-- Tabela mensal -->
                     <div class="card" style="padding: 0; overflow: hidden;">
                         <div class="card-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
-                            <h3>📅 Apuração Mensal</h3>
+                            <h3>📅 Registros mensais por classe</h3>
                             <span class="ir-class-badge" id="ir-active-class-badge">Ações</span>
                         </div>
                         <div class="table-responsive">
                             <table class="assets-table">
-                                <thead>
-                                    <tr>
-                                        <th>Mês</th>
-                                        <th>Vendas (R$)</th>
-                                        <th>Custo (R$)</th>
-                                        <th>Ganho Bruto</th>
-                                        <th>Isenção</th>
-                                        <th>Ganho Tributável</th>
-                                        <th>Prej. Compens.</th>
-                                        <th>Base de Cálculo</th>
-                                        <th>IR Alíq.</th>
-                                        <th>IR Devido</th>
-                                        <th>Status</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
+                                <thead><tr><th>Mês</th><th>Classe</th><th>Vendas</th><th>Custo</th><th>Resultado bruto</th><th>Imposto pago informado</th><th>Ações</th></tr></thead>
                                 <tbody id="ir-table-body" class="table-body">
                                     <tr>
                                         <td colspan="12" style="text-align:center; color:var(--text-tertiary); padding: 40px;">
@@ -1167,37 +1416,300 @@
                         </div>
                     </div>
 
-                    <!-- Legenda de Regras de IR -->
-                    <div class="card ir-rules-card">
-                        <h4 style="margin-bottom: 12px; font-size: 0.9rem;">📖 Regras Tributárias Aplicadas</h4>
-                        <div class="ir-rules-grid">
-                            <div class="ir-rule-item">
-                                <span class="ir-rule-label">📊 Ações (swing trade)</span>
-                                <span class="ir-rule-desc">15% sobre ganhos. Isenção se vendas ≤ R$ 20.000/mês.</span>
-                            </div>
-                            <div class="ir-rule-item">
-                                <span class="ir-rule-label">📊 Ações (day trade)</span>
-                                <span class="ir-rule-desc">20% sobre ganhos. Sem isenção.</span>
-                            </div>
-                            <div class="ir-rule-item">
-                                <span class="ir-rule-label">🏢 FIIs</span>
-                                <span class="ir-rule-desc">Proventos isentos PF. Ganho de capital na venda: 20%.</span>
-                            </div>
-                            <div class="ir-rule-item">
-                                <span class="ir-rule-label">🌐 ETFs</span>
-                                <span class="ir-rule-desc">15% (LP) ou 20% (day trade). Sem isenção de R$20k.</span>
-                            </div>
-                            <div class="ir-rule-item">
-                                <span class="ir-rule-label">🟡 Tesouro Direto</span>
-                                <span class="ir-rule-desc">Tabela regressiva: 22,5% (até 180d) → 15% (acima de 720d).</span>
-                            </div>
-                            <div class="ir-rule-item">
-                                <span class="ir-rule-label">🔻 Prejuízo</span>
-                                <span class="ir-rule-desc">Compensável dentro da mesma classe de ativo em meses futuros.</span>
-                            </div>
+<div class="card"><h4>Controle manual de vendas e pagamentos</h4><p class="goal-note">Esta tela preserva seus registros, mas não apura DARF, isenções ou compensação de prejuízos. O cálculo antigo foi retirado porque misturava classes e podia exibir valores incorretos. Use seus informes e a apuração fiscal para registrar o imposto pago. Os registros aqui não são importados automaticamente do XLSX.</p></div>
+                </div>
+            </section>
+
+            <!-- ==============================================
+                 TELA: AÇÕES
+                 ============================================== -->
+            <!-- ==============================================
+                 TELA: AÇÕES
+                 ============================================== -->
+            <section id="screen-acoes" class="screen">
+                <div class="asset-class-container">
+                    <div class="asset-class-banner">
+                        <div class="asset-class-info">
+                            <h2>📈 Carteira de Ações</h2>
+                            <p>Gestão de ações brasileiras, dividendos, preço médio e análise fundamentalista.</p>
+                        </div>
+                        <button class="btn-primary btn-sm" id="btn-add-acao">➕ Adicionar Ação</button>
+                    </div>
+
+                    <div class="summary-cards-row">
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Patrimônio em Ações</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-acoes-patrimonio">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Valor Investido:</span> <strong id="val-acoes-investido">R$ 0,00</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Ganho de Capital</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value positive" id="val-acoes-lucro">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Variação %:</span> <strong id="val-acoes-var-pct">0,00%</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Proventos Recebidos</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-acoes-proventos">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Dividendos & JCP</span></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Total de Ativos</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-acoes-qtd">0</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Empresas na carteira</span></div>
                         </div>
                     </div>
 
+                    <!-- Tabela de Ações -->
+                    <div class="card multi-asset-card" id="acoes-table-card">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>📋 Ações em Carteira</h3>
+                            <span class="sidebar-badge-pro" id="badge-acoes-count">0 empresas</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="multi-asset-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Empresa</th>
+                                        <th>Quantidade</th>
+                                        <th>Preço Médio</th>
+                                        <th>Cotação Atual</th>
+                                        <th>Posição Atual</th>
+                                        <th>Lucro/Prej.</th>
+                                        <th>Variação %</th>
+                                        <th>Peso %</th>
+                                        <th style="text-align:center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="acoes-table-tbody">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="empty-class-card hidden" id="empty-acoes-card">
+                        <div class="empty-class-icon">📈</div>
+                        <div class="empty-class-title">Nenhuma ação cadastrada ainda</div>
+                        <div class="empty-class-desc">Importe seu extrato anual da B3 com compras de ações ou clique em "➕ Adicionar Ação" acima para registrar suas posições manualmente.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================
+                 TELA: ETFS
+                 ============================================== -->
+            <section id="screen-etfs" class="screen">
+                <div class="asset-class-container">
+                    <div class="asset-class-banner">
+                        <div class="asset-class-info">
+                            <h2>🌐 ETFs (Fundos de Índice)</h2>
+                            <p>Exposição global e setorial diversificada com índices locais e internacionais.</p>
+                        </div>
+                        <button class="btn-primary btn-sm" id="btn-add-etf">➕ Adicionar ETF</button>
+                    </div>
+
+                    <div class="summary-cards-row">
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Patrimônio em ETFs</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-etfs-patrimonio">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Valor Investido:</span> <strong id="val-etfs-investido">R$ 0,00</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Rentabilidade Total</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value positive" id="val-etfs-lucro">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Variação %:</span> <strong id="val-etfs-var-pct">0,00%</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Exposição Internacional</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-etfs-global">0%</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Dólar / Global</span></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Total de ETFs</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-etfs-qtd">0</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Fundos indexados</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de ETFs -->
+                    <div class="card multi-asset-card" id="etfs-table-card">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>📋 Fundos de Índice (ETFs)</h3>
+                            <span class="sidebar-badge-pro" id="badge-etfs-count">0 fundos</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="multi-asset-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th>Nome / Índice</th>
+                                        <th>Quantidade</th>
+                                        <th>Preço Médio</th>
+                                        <th>Cotação Atual</th>
+                                        <th>Posição Atual</th>
+                                        <th>Lucro/Prej.</th>
+                                        <th>Variação %</th>
+                                        <th>Peso %</th>
+                                        <th style="text-align:center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="etfs-table-tbody">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="empty-class-card hidden" id="empty-etfs-card">
+                        <div class="empty-class-icon">🌐</div>
+                        <div class="empty-class-title">Nenhum ETF cadastrado ainda</div>
+                        <div class="empty-class-desc">Cadastre ETFs como IVVB11, BOVA11, SMAL11 ou HASH11 para acompanhar seu desempenho comparado aos principais índices do mercado.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================
+                 TELA: RENDA FIXA
+                 ============================================== -->
+            <section id="screen-renda-fixa" class="screen">
+                <div class="asset-class-container">
+                    <div class="asset-class-banner">
+                        <div class="asset-class-info">
+                            <h2>🏦 Renda Fixa & Tesouro Direto</h2>
+                            <p>Segurança patrimonial, reserva de emergência e previsibilidade de retornos.</p>
+                        </div>
+                        <button class="btn-primary btn-sm" id="btn-add-rf">➕ Adicionar Título</button>
+                    </div>
+
+                    <div class="summary-cards-row">
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Total em Renda Fixa</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-rf-patrimonio">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Custo de Aquisição:</span> <strong id="val-rf-investido">R$ 0,00</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Rendimento Acumulado</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value positive" id="val-rf-lucro">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Juros Acumulados</span></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Taxa Média Ponderada</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-rf-taxa">100% CDI</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Benchmark SELIC/IPCA</span></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Títulos Ativos</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-rf-qtd">0</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">CDB, LCI, LCA, Tesouro</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de Renda Fixa -->
+                    <div class="card multi-asset-card" id="rf-table-card">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>📋 Títulos de Renda Fixa</h3>
+                            <span class="sidebar-badge-pro" id="badge-rf-count">0 títulos</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="multi-asset-table">
+                                <thead>
+                                    <tr>
+                                        <th>Título / Emissor</th>
+                                        <th>Tipo</th>
+                                        <th>Indexador & Taxa</th>
+                                        <th>Aplicação</th>
+                                        <th>Vencimento</th>
+                                        <th>Valor Investido</th>
+                                        <th>Valor Atual</th>
+                                        <th>Rendimento</th>
+                                        <th style="text-align:center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rf-table-tbody">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="empty-class-card hidden" id="empty-rf-card">
+                        <div class="empty-class-icon">🏦</div>
+                        <div class="empty-class-title">Nenhum título de renda fixa cadastrado</div>
+                        <div class="empty-class-desc">Clique em "➕ Adicionar Título" para cadastrar aplicações do Tesouro Direto (Selic, IPCA+), CDBs ou LCIs.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================
+                 TELA: CRIPTOMOEDAS
+                 ============================================== -->
+            <section id="screen-cripto" class="screen">
+                <div class="asset-class-container">
+                    <div class="asset-class-banner">
+                        <div class="asset-class-info">
+                            <h2>🪙 Criptomoedas & Ativos Digitais</h2>
+                            <p>Acompanhamento de Bitcoin, Ethereum e outros criptoativos em tempo real.</p>
+                        </div>
+                        <button class="btn-primary btn-sm" id="btn-add-cripto">➕ Adicionar Cripto</button>
+                    </div>
+
+                    <div class="summary-cards-row">
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Patrimônio Cripto</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-cripto-patrimonio">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Custo em BRL:</span> <strong id="val-cripto-investido">R$ 0,00</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Ganho de Capital</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value positive" id="val-cripto-lucro">R$ 0,00</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Variação %:</span> <strong id="val-cripto-var-pct">0,00%</strong></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Maior Posição</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-cripto-top">BTC</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Dominância</span></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header-kpi"><h3>Total de Moedas</h3></div>
+                            <div class="kpi-main-value"><span class="kpi-value" id="val-cripto-qtd">0</span></div>
+                            <div class="kpi-subtext"><span class="kpi-subtext-label">Wallets & Exchanges</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de Criptomoedas -->
+                    <div class="card multi-asset-card" id="cripto-table-card">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>📋 Carteira de Criptoativos</h3>
+                            <span class="sidebar-badge-pro" id="badge-cripto-count">0 moedas</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="multi-asset-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ativo</th>
+                                        <th>Símbolo</th>
+                                        <th>Quantidade</th>
+                                        <th>Preço Médio</th>
+                                        <th>Cotação Atual</th>
+                                        <th>Valor Total</th>
+                                        <th>Lucro/Prej.</th>
+                                        <th>Variação %</th>
+                                        <th style="text-align:center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cripto-table-tbody">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="empty-class-card hidden" id="empty-cripto-card">
+                        <div class="empty-class-icon">🪙</div>
+                        <div class="empty-class-title">Nenhum criptoativo cadastrado</div>
+                        <div class="empty-class-desc">Clique em "➕ Adicionar Cripto" para registrar suas posições de Bitcoin (BTC), Ethereum (ETH) ou altcoins.</div>
+                    </div>
                 </div>
             </section>
 
@@ -1207,7 +1719,8 @@
         <footer class="app-version-footer" id="app-version-footer">
             <span id="footer-version-text">VS&A v1.0.1</span>
         </footer>
-    </div>
+        </div> <!-- end app-main-wrapper -->
+    </div> <!-- end app-container -->
 
     <!-- Modal: Registrar Venda para IR -->
     <div id="ir-modal" class="modal-overlay hidden">
@@ -1286,6 +1799,150 @@
             <div class="modal-actions">
                 <button class="btn-outline btn-sm" id="btn-ir-cancel">Cancelar</button>
                 <button class="btn-primary btn-sm" id="btn-ir-save">💾 Salvar Operação</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar/Editar Renda Fixa -->
+    <div id="modal-add-rf" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-titlebar">
+                <div class="modal-titlebar-left">
+                    <div class="modal-traffic-lights">
+                        <span class="modal-dot modal-dot-red" data-modal-close="modal-add-rf" title="Fechar"></span>
+                        <span class="modal-dot modal-dot-yellow"></span>
+                        <span class="modal-dot modal-dot-green"></span>
+                    </div>
+                    <span class="modal-titlebar-text">🏦 Adicionar Título de Renda Fixa</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rf-edit-id" value="">
+                <div class="form-group">
+                    <label>Título / Emissor</label>
+                    <input type="text" id="rf-nome" class="modal-input" placeholder="Ex: Tesouro Selic 2029, CDB Banco Inter">
+                </div>
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Tipo de Título</label>
+                        <select id="rf-tipo" class="modal-input">
+                            <option value="Tesouro Direto">Tesouro Direto</option>
+                            <option value="CDB">CDB</option>
+                            <option value="LCI/LCA">LCI / LCA</option>
+                            <option value="CRI/CRA">CRI / CRA</option>
+                            <option value="Debênture">Debênture</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Indexador & Taxa</label>
+                        <input type="text" id="rf-taxa" class="modal-input" placeholder="Ex: 110% CDI ou IPCA + 6,2%">
+                    </div>
+                </div>
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Data de Aplicação</label>
+                        <input type="date" id="rf-data-aplicacao" class="modal-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Data de Vencimento</label>
+                        <input type="date" id="rf-vencimento" class="modal-input">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Valor Investido (R$)</label>
+                    <input type="number" id="rf-valor-investido" class="modal-input" step="50" placeholder="Ex: 5000.00"><label for="rf-valor-atual">Valor atual informado (R$)</label><input type="number" id="rf-valor-atual" class="modal-input" min="0" step="0.01" placeholder="Se vazio, usa o valor investido">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline btn-sm" data-modal-close="modal-add-rf">Cancelar</button>
+                <button class="btn-primary btn-sm" id="btn-save-rf">💾 Salvar Título</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar/Editar Criptomoeda -->
+    <div id="modal-add-cripto" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-titlebar">
+                <div class="modal-titlebar-left">
+                    <div class="modal-traffic-lights">
+                        <span class="modal-dot modal-dot-red" data-modal-close="modal-add-cripto" title="Fechar"></span>
+                        <span class="modal-dot modal-dot-yellow"></span>
+                        <span class="modal-dot modal-dot-green"></span>
+                    </div>
+                    <span class="modal-titlebar-text">🪙 Adicionar Criptoativo</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="cripto-edit-id" value="">
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Símbolo / Ticker</label>
+                        <input type="text" id="cripto-simbolo" class="modal-input" placeholder="BTC, ETH, SOL..." style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Nome do Ativo</label>
+                        <input type="text" id="cripto-nome" class="modal-input" placeholder="Ex: Bitcoin, Ethereum">
+                    </div>
+                </div>
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Quantidade</label>
+                        <input type="number" id="cripto-quant" class="modal-input" step="0.00000001" placeholder="Ex: 0.05">
+                    </div>
+                    <div class="form-group">
+                        <label>Preço Médio (R$)</label>
+                        <input type="number" id="cripto-pm" class="modal-input" step="10" placeholder="Ex: 360000.00">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline btn-sm" data-modal-close="modal-add-cripto">Cancelar</button>
+                <button class="btn-primary btn-sm" id="btn-save-cripto">💾 Salvar Cripto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar/Editar Ação ou ETF Manual -->
+    <div id="modal-add-manual-asset" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-titlebar">
+                <div class="modal-titlebar-left">
+                    <div class="modal-traffic-lights">
+                        <span class="modal-dot modal-dot-red" data-modal-close="modal-add-manual-asset" title="Fechar"></span>
+                        <span class="modal-dot modal-dot-yellow"></span>
+                        <span class="modal-dot modal-dot-green"></span>
+                    </div>
+                    <span class="modal-titlebar-text" id="modal-manual-title">➕ Adicionar Ativo</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="manual-asset-class" value="Ações">
+                <input type="hidden" id="manual-asset-edit-ticker" value="">
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Ticker</label>
+                        <input type="text" id="manual-ticker" class="modal-input" placeholder="Ex: PETR4, IVVB11" style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Nome / Empresa</label>
+                        <input type="text" id="manual-nome" class="modal-input" placeholder="Ex: Petrobras PN">
+                    </div>
+                </div>
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Quantidade</label>
+                        <input type="number" id="manual-quant" class="modal-input" step="1" placeholder="Ex: 100">
+                    </div>
+                    <div class="form-group">
+                        <label>Preço Médio (R$)</label>
+                        <input type="number" id="manual-pm" class="modal-input" step="0.01" placeholder="Ex: 38.50">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline btn-sm" data-modal-close="modal-add-manual-asset">Cancelar</button>
+                <button class="btn-primary btn-sm" id="btn-save-manual-asset">💾 Salvar Ativo</button>
             </div>
         </div>
     </div>
@@ -1648,6 +2305,12 @@
         </div>
     </div>
 
+    <script src="vendor/purify.min.js"></script>
+    <script src="portfolio-core.js"></script>
+    <script src="goals-core.js"></script>
+    <script src="goals-ui.js"></script>
+    <script src="analysis-core.js"></script>
+    <script src="analysis-ui.js"></script>
     <script src="script.js"></script>
 </body>
 

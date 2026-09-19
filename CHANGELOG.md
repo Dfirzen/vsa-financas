@@ -1,5 +1,20 @@
 # Changelog — VS&A
 
+## Correção de cotações e benchmarks — 18/09/2026
+- Brapi: fila sequencial global, um ticker por chamada, consultas duplicadas compartilhadas, tentativas com espera e tratamento explícito de atualização parcial.
+- Histórico: substituída a fonte que retornava HTML de verificação; históricos vazios antigos são recuperados automaticamente.
+- Visão executiva: adicionada a curva do IPCA, ao lado da carteira, CDI e Ibovespa, com indicação dos meses disponíveis.
+- Atualização manual agora também renova históricos e índices; removido o log repetitivo de datas de proventos ausentes.
+- Validação real de cotações, cobertura histórica dos oito ativos do extrato e nove meses de retorno, além dos testes automatizados.
+
+## Correções locais — revisão de 18/09/2026
+- Importação B3: direção de liquidações, datas Excel, validação de colunas e conciliação de extratos sobrepostos preservando operações repetidas.
+- Custo médio separado de lucro realizado; rentabilidade mensal estimada incluindo vendas encerradas e proventos, com indicação de dados insuficientes.
+- Metas corrigidas, histórico de conversas restaurado e painel de conversas conectado ao armazenamento.
+- Chaves protegidas pelo Windows, Markdown sanitizado, sandbox habilitado e dependências locais atualizadas.
+- Gráfico executivo passou a usar dados calculados; removidos índices e notas de saúde simulados.
+- Testes automatizados, documentação e build local separado da publicação.
+
 ## v5.2.0 — 14/08/2026
 - (preencha as novidades desta versão)
 

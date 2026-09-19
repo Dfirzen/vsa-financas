@@ -7,6 +7,7 @@
  */
 
 const fs = require('fs');
+const { writeJson } = require('./json-store');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -107,7 +108,7 @@ class StrategyService {
         };
 
         const toWrite = { current: newCurrent, history };
-        fs.writeFileSync(this._strategyFile, JSON.stringify(toWrite, null, 2), 'utf-8');
+        writeJson(this._strategyFile, toWrite);
         return newCurrent;
     }
 
@@ -151,6 +152,7 @@ class StrategyService {
     checkCompletedGoals(metas) {
         if (!Array.isArray(metas)) return [];
         return metas.filter(m => {
+            if (m.kind === 'recurring' || m.id === 'aporte_mensal') return false;
             const pct = m.value_target > 0 ? (m.value_current / m.value_target) * 100 : 0;
             return pct >= 100;
         });

@@ -41,6 +41,13 @@ const newVersion = parts.join('.');
 // 3. Salva a nova versão no package.json
 pkg.version = newVersion;
 fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+const lockPath = path.resolve(__dirname, '..', 'package-lock.json');
+if (fs.existsSync(lockPath)) {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    lock.version = newVersion;
+    if (lock.packages?.['']) lock.packages[''].version = newVersion;
+    fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n', 'utf8');
+}
 
 // 4. Atualiza o CHANGELOG.md com a nova entrada
 const today = new Date();

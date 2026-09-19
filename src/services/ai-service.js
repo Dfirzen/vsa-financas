@@ -3,32 +3,7 @@
  * Integration with Google Gemini, OpenAI, and Anthropic for portfolio analysis.
  */
 
-const SYSTEM_PROMPT = `Você é o assistente **V S & A** (Visão, Solidez & Autonomia), um consultor financeiro pessoal integrado a um dashboard de investimentos.
-
-Seu papel é analisar o portfólio do investidor e fornecer insights personalizados, claros e acionáveis.
-
-## Regras de conduta:
-1. Sempre responda em **português brasileiro**
-2. Use **emojis** para organizar e tornar a leitura agradável
-3. Seja **objetivo e direto** — o investidor quer respostas práticas
-4. Quando sugerir ativos específicos, sempre mencione que **não é recomendação formal de investimento**
-5. Use dados concretos do portfólio nas suas análises (valores, percentuais, nomes de ativos)
-6. Formate com **markdown**: use títulos, listas, negrito e itálico para organizar
-7. Considere o perfil do investidor com base nos dados (conservador, moderado, arrojado)
-8. Sempre relacione sugestões com as **metas** do investidor quando disponíveis
-9. Se souber o nome do investidor, chame pelo nome para tornar a conversa mais pessoal
-10. Você tem memória da **estratégia de investimento** do usuário — use-a em todas as respostas
-
-## Ao fazer análise automática, cubra:
-- 📊 **Visão Geral** do portfólio
-- 🎯 **Progresso das Metas**
-- ⚠️ **Pontos de Atenção** (concentração, risco, etc)
-- 💡 **Sugestões** práticas e acionáveis
-- 📈 **Projeções** baseadas no ritmo atual
-
-## Disclaimer:
-Sempre inclua ao final de análises mais detalhadas:
-> ⚠️ *Este é um assistente educacional. As informações não constituem recomendação de investimento. Consulte um assessor certificado para decisões financeiras.*`;
+const { SYSTEM_PROMPT, analysisPrompt } = require('./analysis-prompt');
 
 class AIService {
     constructor() {
@@ -37,6 +12,7 @@ class AIService {
         this._model = null;
         this._userName = '';
         this.chatSessions = {}; // session_id -> chat history
+        this.restoredMessages = {};
     }
 
     async configure(provider, apiKey, userName = '') {
@@ -58,7 +34,7 @@ class AIService {
                 });
             } else if (provider === 'openai') {
                 const OpenAI = require('openai');
-                this._model = new OpenAI({ apiKey });
+                this._model = new OpenAI({ apiKey, timeout: 60000, maxRetries: 1 });
             } else if (provider === 'anthropic') {
                 const Anthropic = require('@anthropic-ai/sdk');
                 this._model = new Anthropic({ apiKey });
@@ -79,13 +55,14 @@ class AIService {
             prompt += `\n\nO nome do investidor é **${this._userName}**. Chame-o pelo nome.`;
         }
         if (strategyText) {
-            prompt += `\n\n## ESTRATÉGIA ATUAL DO INVESTIDOR (memória persistente):\n${strategyText}\n\nConsidere esta estratégia como contexto base para TODAS as suas respostas. Nunca peça ao usuário para explicar sua estratégia — você já a conhece.`;
+            prompt += `\n\n## ESTRATÉGIA ATUAL DO INVESTIDOR (memória persistente):\n${strategyText}\n\nEsta memória foi inferida e pode estar desatualizada. Use como hipótese contextual; priorize os dados e pedidos atuais.`;
         }
         return prompt;
     }
 
     _buildPortfolioContext(portfolioData) {
         if (!portfolioData) return 'Nenhum dado de portfólio disponível.';
+        if (portfolioData.snapshot?.schema === 'vsa-analysis-v1') return JSON.stringify(portfolioData.snapshot, null, 2);
 
         const lines = ['## DADOS DO PORTFÓLIO DO INVESTIDOR\n'];
 
@@ -99,7 +76,7 @@ class AIService {
                 for (const [ticker, info] of Object.entries(ativos)) {
                     const quant = info.quant || 0;
                     if (quant > 0) {
-                        const avgPrice = info.avgPrice || 0;
+                        const avgPrice = info.avgPrice ?? (quant > 0 ? info.investedVal / quant : 0);
                         const currentPrice = info.currentPrice || 0;
                         const totalVal = info.totalValue || quant * currentPrice;
                         lines.push(`  - ${ticker}: ${quant} cotas | PM: R$ ${avgPrice.toFixed(2)} | Preço Atual: R$ ${currentPrice.toFixed(2)} | Total: R$ ${totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
@@ -115,14 +92,14 @@ class AIService {
             if (perf.patrimonio !== undefined) lines.push(`- Patrimônio Total: R$ ${(perf.patrimonio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
             if (perf.investido !== undefined) lines.push(`- Valor Investido: R$ ${(perf.investido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
             if (perf.lucro !== undefined) lines.push(`- Lucro/Prejuízo: R$ ${(perf.lucro || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-            if (perf.proventos !== undefined) lines.push(`- Proventos Recebidos (12M): R$ ${(perf.proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+            if (perf.proventos !== undefined) lines.push(`- Proventos Recebidos (período informado): R$ ${(perf.proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
             if (perf.proventos_media !== undefined) lines.push(`- Média Mensal de Proventos: R$ ${(perf.proventos_media || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
         }
 
         // Rentabilidade
         if (portfolioData.rentabilidade) {
             const rent = portfolioData.rentabilidade;
-            lines.push('\n### Rentabilidade (TWR):');
+            lines.push('\n### Rentabilidade estimada (Modified Dietz mensal):');
             if (rent.total !== undefined) lines.push(`- Total Acumulada: ${(rent.total || 0).toFixed(2)}%`);
             if (rent['12m'] !== undefined) lines.push(`- Últimos 12 Meses: ${(rent['12m'] || 0).toFixed(2)}%`);
             if (rent['1m'] !== undefined) lines.push(`- Último Mês: ${(rent['1m'] || 0).toFixed(2)}%`);
@@ -134,7 +111,7 @@ class AIService {
             lines.push('\n### Metas do Investidor:');
             for (const meta of portfolioData.metas) {
                 const perc = meta.value_target > 0 ? (meta.value_current / meta.value_target * 100) : 0;
-                const status = perc >= 100 ? '✅ Concluída' : `${perc.toFixed(1)}%`;
+                const status = meta.kind === 'recurring' || meta.id === 'aporte_mensal' ? 'Compromisso recorrente ativo; não concluído' : perc >= 100 ? 'Objetivo atingido' : `${perc.toFixed(1)}%`;
                 lines.push(`  - ${meta.title}: Atual R$ ${(meta.value_current || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / Objetivo R$ ${(meta.value_target || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${status})`);
             }
         }
@@ -160,12 +137,7 @@ class AIService {
             model: 'gemini-2.0-flash',
             systemInstruction: this._buildSystemPrompt(strategyText)
         });
-        let prompt = '';
-        if (analysisType === 'ativos_vs_metas') {
-            prompt = `Analise a relação entre os Ativos do portfólio e as Metas do investidor.\n\n${context}\n\nForneça uma análise concisa focada exclusivamente em:\n1. Alinhamento da carteira com as metas.\n2. Ajustes recomendados para acelerar a conquista.\nSeja direto e prático, sem análises longas genéricas.`;
-        } else {
-            prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
-        }
+        const prompt = analysisPrompt(context, analysisType);
         const response = await model.generateContent(prompt);
         return response.response.text();
     }
@@ -188,6 +160,7 @@ class AIService {
                 model: 'gemini-2.0-flash',
                 systemInstruction: this._buildSystemPrompt(strategyText)
             });
+            history.push(...(this.restoredMessages[sessionId] || []).map(m => ({role: m.role === 'user' ? 'user' : 'model', parts: [{text: m.content}]})));
             this.chatSessions[sessionId] = sessionModel.startChat({ history });
         }
 
@@ -209,12 +182,7 @@ class AIService {
     // OPENAI (ChatGPT)
     // ==========================================
     async _openaiAnalyze(context, strategyText = '', analysisType = 'geral') {
-        let prompt = '';
-        if (analysisType === 'ativos_vs_metas') {
-            prompt = `Analise a relação entre os Ativos do portfólio e as Metas do investidor.\n\n${context}\n\nForneça uma análise concisa focada exclusivamente em:\n1. Alinhamento da carteira com as metas.\n2. Ajustes recomendados para acelerar a conquista.\nSeja direto e prático, sem análises longas genéricas.`;
-        } else {
-            prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
-        }
+        const prompt = analysisPrompt(context, analysisType);
         const response = await this._model.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -237,6 +205,7 @@ class AIService {
                     { role: 'assistant', content: 'Entendido! Analisei todos os dados do seu portfólio e conheço sua estratégia. Estou pronto para ajudar. 🚀' }
                 );
             }
+            history.push(...(this.restoredMessages[sessionId] || []).map(m => ({role: m.role === 'user' ? 'user' : 'assistant', content: m.content})));
             this.chatSessions[sessionId] = history;
         }
 
@@ -271,12 +240,7 @@ class AIService {
     // ANTHROPIC (Claude)
     // ==========================================
     async _anthropicAnalyze(context, strategyText = '', analysisType = 'geral') {
-        let prompt = '';
-        if (analysisType === 'ativos_vs_metas') {
-            prompt = `Analise a relação entre os Ativos do portfólio e as Metas do investidor.\n\n${context}\n\nForneça uma análise concisa focada exclusivamente em:\n1. Alinhamento da carteira com as metas.\n2. Ajustes recomendados para acelerar a conquista.\nSeja direto e prático, sem análises longas genéricas.`;
-        } else {
-            prompt = `Analise o portfólio abaixo e forneça uma análise completa e personalizada.\n\n${context}\n\nForneça sua análise cobrindo: Visão Geral, Progresso das Metas, Pontos de Atenção, Sugestões práticas e Projeções.`;
-        }
+        const prompt = analysisPrompt(context, analysisType);
         const response = await this._model.messages.create({
             model: 'claude-3-5-sonnet-latest',
             max_tokens: 4096,
@@ -296,6 +260,7 @@ class AIService {
                     { role: 'assistant', content: 'Entendido! Analisei todos os dados do seu portfólio e conheço sua estratégia. Estou pronto para ajudar. 🚀' }
                 );
             }
+            history.push(...(this.restoredMessages[sessionId] || []).map(m => ({role: m.role === 'user' ? 'user' : 'assistant', content: m.content})));
             this.chatSessions[sessionId] = history;
         }
 
@@ -412,7 +377,16 @@ class AIService {
         }
     }
 
+    restoreSession(sessionId, messages) {
+        // Rebuild each request with the current portfolio and bounded persisted history.
+        delete this.chatSessions[sessionId];
+        const recent = messages.slice(-40).filter(m => ['user', 'bot'].includes(m.role) && typeof m.content === 'string');
+        while (recent.length && recent[0].role !== 'user') recent.shift();
+        this.restoredMessages[sessionId] = recent;
+    }
+
     clearSession(sessionId) {
+        delete this.restoredMessages[sessionId];
         if (this.chatSessions[sessionId]) {
             delete this.chatSessions[sessionId];
         }
@@ -421,4 +395,4 @@ class AIService {
 
 // Singleton
 const aiService = new AIService();
-module.exports = { aiService };
+module.exports = { aiService, AIService };

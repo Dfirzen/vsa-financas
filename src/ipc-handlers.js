@@ -5,16 +5,15 @@
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
+const { writeJson } = require('./services/json-store');
+const GoalsCore = require('../renderer/goals-core');
 const { configService } = require('./services/config-service');
 const { marketDataService } = require('./services/market-data-service');
 const { aiService } = require('./services/ai-service');
 const { dividendsService } = require('./services/dividends-service');
 const { strategyService } = require('./services/strategy-service');
 const { conversationsService } = require('./services/conversations-service');
-
-function getBasePath() {
-    return path.dirname(__dirname); // project root
-}
 
 const DEFAULT_METAS = [
     {
@@ -31,7 +30,7 @@ const DEFAULT_METAS = [
         title: 'Aporte Mensal',
         icon: '📈',
         value_current: 0,
-        value_target: 1000,
+        value_target: 500,
         status: 'in_progress',
         type: 'currency'
     },
@@ -66,15 +65,24 @@ function getMetasPath() {
 function loadMetas() {
     const metasFile = getMetasPath();
     if (!fs.existsSync(metasFile)) {
-        fs.writeFileSync(metasFile, JSON.stringify(DEFAULT_METAS, null, 4), 'utf-8');
-        return [...DEFAULT_METAS];
+        const defaults = DEFAULT_METAS.map(m => GoalsCore.normalize(m));
+        writeJson(metasFile, defaults);
+        return defaults;
     }
     try {
         const data = fs.readFileSync(metasFile, 'utf-8');
-        return JSON.parse(data);
+        const original = JSON.parse(data);
+        if (!Array.isArray(original)) throw new Error('Formato inválido.');
+        const normalized = original.map(m => GoalsCore.normalize(m));
+        if (JSON.stringify(original) !== JSON.stringify(normalized)) {
+            const backup = metasFile + '.before-redesign.json';
+            if (!fs.existsSync(backup)) fs.copyFileSync(metasFile, backup);
+            writeJson(metasFile, normalized);
+        }
+        return normalized;
     } catch (e) {
         console.error(`Error loading metas: ${e}`);
-        return [...DEFAULT_METAS];
+        throw new Error('Não foi possível ler as metas. O arquivo original foi preservado.');
     }
 }
 
@@ -84,7 +92,7 @@ function saveMetas(metas) {
     const dataDir = path.join(userDataPath, 'data');
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     const metasFile = path.join(dataDir, 'metas.json');
-    fs.writeFileSync(metasFile, JSON.stringify(metas, null, 4), 'utf-8');
+    writeJson(metasFile, metas);
 }
 
 // Initialize AI from saved config
@@ -100,31 +108,44 @@ function initAiFromConfig() {
 }
 
 function registerIpcHandlers() {
+    const trustedURL = pathToFileURL(path.join(__dirname, '..', 'renderer', 'index.html')).href;
+    const handle = (channel, callback) => ipcMain.handle(channel, (event, ...args) => {
+        if (event.senderFrame?.url !== trustedURL || event.senderFrame !== event.sender.mainFrame) throw new Error('Origem IPC não autorizada.');
+        return callback(event, ...args);
+    });
+    const validateMeta = data => {
+        GoalsCore.validate(data || {});
+        if (!data || typeof data !== 'object') throw new Error('Meta inválida.');
+        if (data.title !== undefined && (typeof data.title !== 'string' || !data.title.trim() || data.title.length > 200)) throw new Error('Título inválido.');
+        for (const field of ['value_target', 'value_current']) {
+            if (data[field] !== undefined && (!Number.isFinite(Number(data[field])) || Number(data[field]) < 0 || (field === 'value_target' && Number(data[field]) === 0))) throw new Error('Valor da meta inválido.');
+        }
+        if (data.icon !== undefined && (typeof data.icon !== 'string' || data.icon.length > 20)) throw new Error('Ícone inválido.');
+    };
     // Initialize AI on startup
     initAiFromConfig();
 
     // ==========================================
     // CONFIG
     // ==========================================
-    ipcMain.handle('get-config', () => {
+    handle('get-config', () => {
         const cfg = configService.getConfig();
         const safeCfg = { ...cfg };
-        if (safeCfg.ai_api_key) {
-            const key = safeCfg.ai_api_key;
-            safeCfg.ai_api_key_masked = key.length > 12
-                ? key.substring(0, 8) + '...' + key.substring(key.length - 4)
-                : '***';
-            safeCfg.ai_api_key = ''; // Don't send full key
+        for (const field of ['ai_api_key', 'brapi_token']) {
+            if (safeCfg[field]) safeCfg[`${field}_masked`] = '••••' + safeCfg[field].slice(-4);
+            safeCfg[field] = '';
         }
         return safeCfg;
     });
 
-    ipcMain.handle('save-config', async (_event, data) => {
+    handle('save-config', async (_event, data) => {
+        if (!data || typeof data !== 'object') throw new Error('Configuração inválida.');
         // If API key came empty, keep the previous one
         const currentCfg = configService.getConfig();
         if (!data.ai_api_key && currentCfg.ai_api_key) {
             data.ai_api_key = currentCfg.ai_api_key;
         }
+        if (!data.brapi_token && currentCfg.brapi_token) data.brapi_token = currentCfg.brapi_token;
         data.is_configured = true;
 
         const success = configService.saveConfig(data);
@@ -132,9 +153,9 @@ function registerIpcHandlers() {
         if (success) {
             // Reconfigure AI service with new settings
             await aiService.configure(
-                data.ai_provider || 'gemini',
-                data.ai_api_key || '',
-                data.user_name || ''
+                configService.getConfig().ai_provider,
+                configService.getConfig().ai_api_key,
+                configService.getConfig().user_name
             );
         }
 
@@ -144,11 +165,12 @@ function registerIpcHandlers() {
     // ==========================================
     // METAS
     // ==========================================
-    ipcMain.handle('get-metas', () => {
+    handle('get-metas', () => {
         return loadMetas();
     });
 
-    ipcMain.handle('update-meta', (_event, metaId, data) => {
+    handle('update-meta', (_event, metaId, data) => {
+        validateMeta(data);
         const metas = loadMetas();
         let updatedMeta = null;
 
@@ -158,28 +180,23 @@ function registerIpcHandlers() {
                 if (data.value_target !== undefined) meta.value_target = parseFloat(data.value_target);
                 if (data.value_current !== undefined) meta.value_current = parseFloat(data.value_current);
                 if (data.icon !== undefined) meta.icon = data.icon;
+                GoalsCore.validate({...meta,...data});
+                for (const key of ['kind','metric','year','start_month']) if (data[key] !== undefined) meta[key] = data[key];
                 updatedMeta = meta;
                 break;
             }
         }
 
-        // Auto-calculate annual if monthly is updated
-        if (metaId === 'aporte_mensal' && data.value_target !== undefined) {
-            for (const m of metas) {
-                if (m.id === 'aporte_anual') {
-                    m.value_target = parseFloat(data.value_target) * 12;
-                }
-            }
-        }
-
+        if (!updatedMeta) throw new Error('Meta não encontrada.');
         saveMetas(metas);
         return { status: 'success', meta: updatedMeta };
     });
 
-    ipcMain.handle('create-meta', (_event, data) => {
+    handle('create-meta', (_event, data) => {
+        validateMeta(data);
         const metas = loadMetas();
         const newMeta = {
-            id: data.id || `custom_${Date.now()}`,
+            id: `custom_${require('crypto').randomUUID()}`,
             title: data.title || 'Nova Meta',
             icon: data.icon || '🎯',
             value_current: parseFloat(data.value_current || 0),
@@ -187,12 +204,14 @@ function registerIpcHandlers() {
             status: 'in_progress',
             type: data.type || 'currency'
         };
+        Object.assign(newMeta, GoalsCore.normalize({...newMeta, ...Object.fromEntries(['kind','metric','year','start_month'].filter(k=>data[k]!==undefined).map(k=>[k,data[k]]))}));
+        GoalsCore.validate(newMeta);
         metas.push(newMeta);
         saveMetas(metas);
         return { status: 'success', meta: newMeta };
     });
 
-    ipcMain.handle('delete-meta', (_event, metaId) => {
+    handle('delete-meta', (_event, metaId) => {
         let metas = loadMetas();
         metas = metas.filter(m => m.id !== metaId);
         saveMetas(metas);
@@ -202,24 +221,23 @@ function registerIpcHandlers() {
     // ==========================================
     // EXTRATO FILES
     // ==========================================
-    ipcMain.handle('get-extrato-files', () => {
+    handle('get-extrato-files', () => {
         const cfg = configService.getConfig();
         const folderPath = cfg.excel_folder_path || '';
 
-        if (!folderPath || !fs.existsSync(folderPath)) {
-            return [];
-        }
+        if (!folderPath) return [];
+        if (!fs.existsSync(folderPath)) throw new Error('A pasta de extratos configurada não foi encontrada.');
 
         try {
             const stat = fs.statSync(folderPath);
             if (!stat.isDirectory()) {
-                return [];
+                throw new Error('O caminho configurado não é uma pasta.');
             }
 
             const files = fs.readdirSync(folderPath);
             const excelFiles = files.filter(file => {
                 const ext = path.extname(file).toLowerCase();
-                return ext === '.xlsx' || ext === '.xls';
+                return !file.startsWith('~$') && (ext === '.xlsx' || ext === '.xls');
             });
 
             const result = [];
@@ -232,34 +250,37 @@ function registerIpcHandlers() {
                         buffer: buffer
                     });
                 } catch (err) {
-                    console.error(`Error reading B3 extract file ${file}:`, err);
+                    throw new Error('Não foi possível ler um dos extratos. Confira acesso aos arquivos da pasta B3.');
                 }
             }
             return result;
         } catch (e) {
-            console.error(`Error listing B3 folder path ${folderPath}:`, e);
-            return [];
+            throw new Error('Não foi possível ler a pasta de extratos. Confira o caminho e as permissões dos arquivos.');
         }
     });
 
     // ==========================================
     // MARKET DATA
     // ==========================================
-    ipcMain.handle('get-quotes', async (_event, tickers, forceRefresh) => {
+    handle('get-quotes', async (_event, tickers, forceRefresh) => {
         if (!tickers || tickers.length === 0) return {};
         return await marketDataService.getPrices(tickers, forceRefresh);
     });
 
-    ipcMain.handle('get-indices', async () => {
-        return await marketDataService.getIndicesHistory();
+    handle('get-indices', async (_event, period, force) => {
+        return await marketDataService.getIndicesHistory(period || '2y', !!force);
     });
 
-    ipcMain.handle('get-monthly-prices', async (_event, tickers, period) => {
+    handle('get-quote-status', (_event, tickers) => {
+        return marketDataService.getQuoteStatus(tickers);
+    });
+
+    handle('get-monthly-prices', async (_event, tickers, period, force) => {
         if (!tickers || tickers.length === 0) return {};
-        return await marketDataService.getMonthlyPrices(tickers, period || '2y');
+        return await marketDataService.getMonthlyPrices(tickers, period || '2y', !!force);
     });
 
-    ipcMain.handle('get-next-dividends', async (_event, tickers) => {
+    handle('get-next-dividends', async (_event, tickers) => {
         if (!tickers || tickers.length === 0) return {};
         try {
             return await dividendsService.getNextPaymentDates(tickers);
@@ -272,16 +293,16 @@ function registerIpcHandlers() {
     // ==========================================
     // AI
     // ==========================================
-    ipcMain.handle('ai-status', () => {
+    handle('ai-status', () => {
         return { configured: aiService.isConfigured() };
     });
 
-    ipcMain.handle('ai-analyze', async (_event, data) => {
+    handle('ai-analyze', async (_event, data) => {
         const strategyText = strategyService.getCurrentStrategySummary();
         return await aiService.analyzePortfolio(data || {}, strategyText);
     });
 
-    ipcMain.handle('ai-chat', async (_event, data) => {
+    handle('ai-chat', async (_event, data) => {
         const sessionId = data.session_id || 'default';
         const message = data.message || '';
         const portfolioData = data.portfolio_data || null;
@@ -290,6 +311,9 @@ function registerIpcHandlers() {
         if (!message) {
             return { error: 'Message is required' };
         }
+        if (typeof message !== 'string' || message.length > 30000) throw new Error('Mensagem inválida ou muito longa.');
+        if (conversationId && !conversationsService.getAllConversations().some(c => c.id === conversationId)) throw new Error('Conversa não encontrada.');
+        if (conversationId) aiService.restoreSession(sessionId, conversationsService.getMessages(conversationId), portfolioData, strategyService.getCurrentStrategySummary());
 
         // Persist user message
         if (conversationId) {
@@ -310,11 +334,11 @@ function registerIpcHandlers() {
     // ==========================================
     // STRATEGY
     // ==========================================
-    ipcMain.handle('get-strategy', () => {
+    handle('get-strategy', () => {
         return strategyService.loadStrategy();
     });
 
-    ipcMain.handle('infer-strategy', async (_event, data) => {
+    handle('infer-strategy', async (_event, data) => {
         const portfolioData = data.portfolio_data || {};
         const metas = data.metas || [];
 
@@ -340,38 +364,38 @@ function registerIpcHandlers() {
     // ==========================================
     // CONVERSATIONS
     // ==========================================
-    ipcMain.handle('get-conversations', () => {
+    handle('get-conversations', () => {
         return conversationsService.getAllConversations();
     });
 
-    ipcMain.handle('get-active-conversation', () => {
+    handle('get-active-conversation', () => {
         return conversationsService.getOrCreateActiveConversation();
     });
 
-    ipcMain.handle('get-conversation-messages', (_event, conversationId) => {
+    handle('get-conversation-messages', (_event, conversationId) => {
         return conversationsService.getMessages(conversationId);
     });
 
-    ipcMain.handle('create-conversation', (_event, title) => {
+    handle('create-conversation', (_event, title) => {
         return conversationsService.createConversation(title || null);
     });
 
-    ipcMain.handle('set-active-conversation', (_event, conversationId) => {
+    handle('set-active-conversation', (_event, conversationId) => {
         return conversationsService.setActiveConversation(conversationId);
     });
 
-    ipcMain.handle('delete-conversation', (_event, conversationId) => {
+    handle('delete-conversation', (_event, conversationId) => {
         return conversationsService.deleteConversation(conversationId);
     });
 
-    ipcMain.handle('rename-conversation', (_event, conversationId, newTitle) => {
+    handle('rename-conversation', (_event, conversationId, newTitle) => {
         return conversationsService.renameConversation(conversationId, newTitle);
     });
 
     // ==========================================
     // NATIVE DIALOGS
     // ==========================================
-    ipcMain.handle('select-file', async (_event, options) => {
+    handle('select-file', async (_event, options) => {
         const result = await dialog.showOpenDialog({
             properties: ['openFile'],
             filters: options?.filters || [
@@ -383,7 +407,7 @@ function registerIpcHandlers() {
         return result.filePaths[0];
     });
 
-    ipcMain.handle('select-folder', async (_event) => {
+    handle('select-folder', async (_event) => {
         const result = await dialog.showOpenDialog({
             properties: ['openDirectory']
         });
