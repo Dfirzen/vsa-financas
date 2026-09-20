@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="goals.css">
     <link rel="stylesheet" href="responsive.css">
+    <link rel="stylesheet" href="window-controls.css">
 </head>
 
 <body>
@@ -36,9 +37,9 @@
             <div class="modal-titlebar">
                 <div class="modal-titlebar-left">
                     <div class="modal-traffic-lights">
-                        <span class="modal-dot modal-dot-red" data-modal-close="meta-modal" title="Fechar"></span>
-                        <span class="modal-dot modal-dot-yellow"></span>
-                        <span class="modal-dot modal-dot-green"></span>
+                        <button type="button" class="modal-dot modal-dot-red" data-modal-close="meta-modal" aria-label="Fechar janela interna" title="Fechar"></button>
+                        <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+                        <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
                     </div>
                     <span class="modal-titlebar-text" id="modal-title">Editar Meta</span>
                 </div>
@@ -74,9 +75,9 @@
             <div class="modal-titlebar">
                 <div class="modal-titlebar-left">
                     <div class="modal-traffic-lights">
-                        <span class="modal-dot modal-dot-red" data-modal-close="config-modal" title="Fechar"></span>
-                        <span class="modal-dot modal-dot-yellow"></span>
-                        <span class="modal-dot modal-dot-green"></span>
+                        <button type="button" class="modal-dot modal-dot-red" data-modal-close="config-modal" aria-label="Fechar janela interna" title="Fechar"></button>
+                        <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+                        <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
                     </div>
                     <span class="modal-titlebar-text">⚙️ Configurações</span>
                 </div>
@@ -301,6 +302,14 @@
             </div>
         </div>
     </div>
+    <header id="app-window-bar" class="app-window-bar" aria-label="Controles da janela" hidden>
+        <span class="app-window-title">VS&A — Visão, Solidez & Autonomia</span>
+        <div class="app-window-actions">
+            <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+            <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
+            <button type="button" class="modal-dot modal-dot-red" data-window-action="close" aria-label="Fechar janela" title="Fechar"></button>
+        </div>
+    </header>
     <div class="app-container">
         <!-- Sidebar Lateral Executiva -->
         <aside class="app-sidebar" id="app-sidebar">
@@ -1729,9 +1738,9 @@
             <div class="modal-titlebar">
                 <div class="modal-titlebar-left">
                     <div class="modal-traffic-lights">
-                        <span class="modal-dot modal-dot-red" data-modal-close="ir-modal" title="Fechar"></span>
-                        <span class="modal-dot modal-dot-yellow"></span>
-                        <span class="modal-dot modal-dot-green"></span>
+                        <button type="button" class="modal-dot modal-dot-red" data-modal-close="ir-modal" aria-label="Fechar janela interna" title="Fechar"></button>
+                        <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+                        <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
                     </div>
                     <span class="modal-titlebar-text">📋 Registrar Operação</span>
                 </div>
@@ -1809,9 +1818,9 @@
             <div class="modal-titlebar">
                 <div class="modal-titlebar-left">
                     <div class="modal-traffic-lights">
-                        <span class="modal-dot modal-dot-red" data-modal-close="modal-add-rf" title="Fechar"></span>
-                        <span class="modal-dot modal-dot-yellow"></span>
-                        <span class="modal-dot modal-dot-green"></span>
+                        <button type="button" class="modal-dot modal-dot-red" data-modal-close="modal-add-rf" aria-label="Fechar janela interna" title="Fechar"></button>
+                        <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+                        <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
                     </div>
                     <span class="modal-titlebar-text">🏦 Adicionar Título de Renda Fixa</span>
                 </div>
@@ -1866,9 +1875,9 @@
             <div class="modal-titlebar">
                 <div class="modal-titlebar-left">
                     <div class="modal-traffic-lights">
-                        <span class="modal-dot modal-dot-red" data-modal-close="modal-add-cripto" title="Fechar"></span>
-                        <span class="modal-dot modal-dot-yellow"></span>
-                        <span class="modal-dot modal-dot-green"></span>
+                        <button type="button" class="modal-dot modal-dot-red" data-modal-close="modal-add-cripto" aria-label="Fechar janela interna" title="Fechar"></button>
+                        <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+                        <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
                     </div>
                     <span class="modal-titlebar-text">🪙 Adicionar Criptoativo</span>
                 </div>
@@ -1909,9 +1918,9 @@
             <div class="modal-titlebar">
                 <div class="modal-titlebar-left">
                     <div class="modal-traffic-lights">
-                        <span class="modal-dot modal-dot-red" data-modal-close="modal-add-manual-asset" title="Fechar"></span>
-                        <span class="modal-dot modal-dot-yellow"></span>
-                        <span class="modal-dot modal-dot-green"></span>
+                        <button type="button" class="modal-dot modal-dot-red" data-modal-close="modal-add-manual-asset" aria-label="Fechar janela interna" title="Fechar"></button>
+                        <button type="button" class="modal-dot modal-dot-yellow" data-window-action="minimize" aria-label="Minimizar janela" title="Minimizar"></button>
+                        <button type="button" class="modal-dot modal-dot-green" data-window-action="toggle-maximize" aria-label="Maximizar janela" title="Maximizar"></button>
                     </div>
                     <span class="modal-titlebar-text" id="modal-manual-title">➕ Adicionar Ativo</span>
                 </div>
@@ -2311,6 +2320,7 @@
     <script src="goals-ui.js"></script>
     <script src="analysis-core.js"></script>
     <script src="analysis-ui.js"></script>
+    <script src="window-controls.js"></script>
     <script src="script.js"></script>
 </body>
 

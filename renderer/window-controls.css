@@ -1,0 +1,29 @@
+.app-window-bar[hidden] { display: none; }
+
+body.windows-custom-frame .app-container,
+body.windows-custom-frame .app-main-wrapper {
+    min-height: calc(100vh - 38px);
+}
+
+.app-window-bar {
+    height: 38px;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    background: var(--modal-titlebar-bg);
+    border-bottom: 1px solid var(--modal-border-color);
+    color: var(--text-secondary);
+    user-select: none;
+    app-region: drag;
+    position: relative;
+    z-index: 200;
+}
+
+.app-window-title { font-size: 12px; font-weight: 600; }
+.app-window-actions { display: flex; align-items: center; gap: 10px; app-region: no-drag; }
+.app-window-actions button { app-region: no-drag; }
+.app-window-actions .modal-dot { width: 14px; height: 14px; flex-basis: 14px; }
+.modal-dot-yellow:hover, .modal-dot-green:hover { filter: brightness(1.25); }
+.modal-dot:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }

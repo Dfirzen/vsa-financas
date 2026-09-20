@@ -10,6 +10,9 @@ const subscribe = (channel, callback) => {
 };
 
 contextBridge.exposeInMainWorld('api', {
+    customWindowFrame: process.platform === 'win32',
+    windowAction: (action) => ipcRenderer.invoke('window:action', action),
+    onWindowState: (callback) => subscribe('window:state', callback),
     // Config
     getConfig: () => ipcRenderer.invoke('get-config'),
     saveConfig: (data) => ipcRenderer.invoke('save-config', data),

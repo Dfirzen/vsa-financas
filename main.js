@@ -65,6 +65,7 @@ function createWindow() {
         height: 900,
         minWidth: 1024,
         minHeight: 700,
+        frame: process.platform !== 'win32',
         icon: path.join(__dirname, 'Icone.png'),
         title: 'V S & A',
         backgroundColor: '#15191C', // Match app background for instant paint
@@ -84,6 +85,9 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
     mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     mainWindow.webContents.on('will-navigate', event => event.preventDefault());
+    const sendWindowState = () => mainWindow?.webContents.send('window:state', { maximized: mainWindow.isMaximized() });
+    mainWindow.on('maximize', sendWindowState);
+    mainWindow.on('unmaximize', sendWindowState);
 
     // Show window when content is ready (prevents white flash)
     mainWindow.once('ready-to-show', () => {
@@ -100,6 +104,15 @@ function createWindow() {
 // Register IPC handlers before window creation
 app.whenReady().then(() => {
     registerIpcHandlers();
+
+    ipcMain.handle('window:action', (event, action) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win || win !== mainWindow || !['minimize', 'toggle-maximize', 'close', 'state'].includes(action)) return null;
+        if (action === 'minimize') win.minimize();
+        if (action === 'toggle-maximize') win.isMaximized() ? win.unmaximize() : win.maximize();
+        if (action === 'close') win.close();
+        return { maximized: win.isMaximized() };
+    });
 
     // --- Version & Changelog IPC ---
     ipcMain.handle('get-app-version', () => {

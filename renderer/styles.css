@@ -1064,6 +1064,10 @@ body.light-mode .modal-content {
     height: 12px;
     border-radius: 50%;
     display: inline-block;
+    flex: 0 0 12px;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
     transition: opacity 0.2s, filter 0.2s;
 }
 

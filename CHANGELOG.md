@@ -1,5 +1,10 @@
 # Changelog — VS&A
 
+## v5.2.2 — 20/09/2026
+- Controles de janela coloridos no canto superior direito: minimizar, maximizar, restaurar e fechar.
+- Botões amarelo e verde dos modais agora controlam a janela; o vermelho fecha somente o modal.
+
+
 ## v5.2.1 — 20/09/2026
 - Metas reorganizadas em compromisso mensal, objetivo anual e marcos de longo prazo.
 - Análise Kaguya com panorama da carteira, resultado, proventos e progresso nas metas.
