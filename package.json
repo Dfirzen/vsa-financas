@@ -1,6 +1,6 @@
 {
   "name": "investai-desktop",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "description": "InvestAI - Dashboard de Investimentos Desktop",
   "main": "main.js",
   "scripts": {

@@ -1,5 +1,13 @@
 # Changelog — VS&A
 
+## v5.2.1 — 20/09/2026
+- Metas reorganizadas em compromisso mensal, objetivo anual e marcos de longo prazo.
+- Análise Kaguya com panorama da carteira, resultado, proventos e progresso nas metas.
+- Visão executiva e outras telas adaptadas a janelas menores.
+- Melhorias no processamento do extrato B3, nas cotações, na proteção dos dados locais e nos cadastros manuais.
+- Imposto de Renda preserva os registros como controle manual; cálculos automáticos inconsistentes foram removidos.
+
+
 ## Correção de cotações e benchmarks — 18/09/2026
 - Brapi: fila sequencial global, um ticker por chamada, consultas duplicadas compartilhadas, tentativas com espera e tratamento explícito de atualização parcial.
 - Histórico: substituída a fonte que retornava HTML de verificação; históricos vazios antigos são recuperados automaticamente.
