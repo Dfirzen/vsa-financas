@@ -1571,16 +1571,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('assets-list-container');
         container.innerHTML = '';
 
+        const grouped = FiiSegments.group(categories.FIIs || {}, window.appConfig?.fii_segment_overrides || {});
+        categories = grouped.categories;
+        globalTotal = grouped.total;
+
         let totalAssetsCount = 0;
         let totalRightsTickers = 0;
 
-        const classIcons = { "FIIs": "🏢", "Ações": "💲", "ETFs": "📈", "Tesouro Direto": "🏫" };
+        const classIcons = FiiSegments.icons;
 
         Object.keys(categories).forEach(catName => {
             const cat = categories[catName];
             const activeKeys = Object.keys(cat.ativos).filter(k => cat.ativos[k].quant > 0 || cat.ativos[k].totalVal > 0);
 
-            // Renderiza mesmo que não tenha ativos ativados para simular o layout (0 ativos)
             totalAssetsCount += activeKeys.length;
 
             const template = document.getElementById('template-asset-group');
@@ -1596,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clone.querySelector('.total-val').textContent = cat.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
             const pctCarteira = globalTotal > 0 ? ((cat.total / globalTotal) * 100).toFixed(0) : 0;
-            clone.querySelector('.part-pct').textContent = `⌚ ${pctCarteira}% / 25%`; // Mocking 25% ideal
+            clone.querySelector('.part-pct').textContent = `${pctCarteira}% dos FIIs`;
 
             header.addEventListener('click', () => {
                 const isExpanded = groupDiv.classList.contains('expanded');

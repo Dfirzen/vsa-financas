@@ -5,6 +5,8 @@ body.windows-custom-frame .app-main-wrapper {
     min-height: calc(100vh - 38px);
 }
 
+body.windows-custom-frame { padding-top: 38px; }
+
 .app-window-bar {
     height: 38px;
     min-height: 38px;
@@ -17,8 +19,11 @@ body.windows-custom-frame .app-main-wrapper {
     color: var(--text-secondary);
     user-select: none;
     app-region: drag;
-    position: relative;
-    z-index: 200;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1200;
 }
 
 .app-window-title { font-size: 12px; font-weight: 600; }

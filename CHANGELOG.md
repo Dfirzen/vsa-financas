@@ -1,5 +1,12 @@
 # Changelog — VS&A
 
+## v5.3.1 — 23/09/2026
+- A barra superior do VS&A e os controles da janela permanecem visíveis durante a rolagem.
+- A visão Categorias dos Fundos Imobiliários agora agrupa os ativos em Tijolo, Papel e recebíveis, Fundo de fundos, Híbrido, Desenvolvimento ou Não classificado.
+- Classes gerais como Ações, ETFs e Tesouro Direto deixaram de aparecer dentro da tela de FIIs.
+- A visão Foco na Construção foi preservada.
+
+
 ## v5.3.0 — 22/09/2026
 - Nova Central de Saúde da Carteira com sinais de qualidade dos dados, concentração e renda recente.
 - Distribuição por classe e contribuição positiva ou negativa de cada posição.

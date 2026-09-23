@@ -1,6 +1,6 @@
 {
   "name": "investai-desktop",
-  "version": "5.3.0",
+  "version": "5.3.1",
   "description": "InvestAI - Dashboard de Investimentos Desktop",
   "main": "main.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "check:history": "node scripts/check-privacy.cjs --history",
     "test:responsive": "node scripts/check-responsive.cjs",
     "test:flows": "node scripts/check-app-flows.cjs",
-    "test:window": "node scripts/check-window-controls.cjs"
+    "test:window": "node scripts/check-window-controls.cjs",
+    "test:fii-categories": "node scripts/check-fii-categories.cjs"
   },
   "author": "Diego",
   "license": "MIT",
