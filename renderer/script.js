@@ -1364,7 +1364,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.proventoFilters = window.proventoFilters || {
             viewType: 'Mensal',
             selectedYear: 'Todos',
-            selectedType: 'Todos'
+            selectedType: 'Todos',
+            selectedTicker: 'Todos',
+            showAll: false
         };
 
         populateFilters();
@@ -1435,6 +1437,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const provTypeFilter = document.getElementById('prov-filter-tipo');
         if (provTypeFilter) {
             updateSelectOptions(provTypeFilter, activeCategories);
+        }
+        const provFundFilter = document.getElementById('prov-filter-fundo');
+        if (provFundFilter) {
+            const selected = window.proventoFilters?.selectedTicker || 'Todos';
+            const tickers = [...new Set((window.dashboardState?.yieldTransactions || []).filter(t => t.assetClass === 'FIIs' || /^[A-Z]{4}11$/i.test(t.ticker || '')).map(t => t.ticker))].sort();
+            provFundFilter.replaceChildren(new Option('Todos os fundos', 'Todos'), ...tickers.map(t => new Option(t, t)));
+            provFundFilter.value = tickers.includes(selected) ? selected : 'Todos';
+            if (provFundFilter.value !== selected && window.proventoFilters) window.proventoFilters.selectedTicker = 'Todos';
         }
     }
 
@@ -1544,6 +1554,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Event Listeners para Proventos
         document.getElementById('prov-filter-tipo')?.addEventListener('change', (e) => {
             window.proventoFilters.selectedType = e.target.value;
+            renderProventosScreen();
+        });
+        document.getElementById('prov-filter-fundo')?.addEventListener('change', (e) => {
+            window.proventoFilters.selectedTicker = e.target.value;
+            window.proventoFilters.showAll = false;
+            renderProventosScreen();
+        });
+        document.getElementById('prov-list-toggle')?.addEventListener('click', () => {
+            window.proventoFilters.showAll = !window.proventoFilters.showAll;
             renderProventosScreen();
         });
         const btnMensal = document.getElementById('prov-btn-mensal');
@@ -1776,24 +1795,27 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderProventosScreen() {
         if (!window.dashboardState) return;
         const { yieldTransactions, proventosTotais } = window.dashboardState;
-        const filters = window.proventoFilters || { viewType: 'Mensal', selectedType: 'Todos' };
+        const filters = window.proventoFilters || { viewType: 'Mensal', selectedType: 'Todos', selectedTicker: 'Todos', showAll: false };
         
         // 1. Filtragem Inicial
         let txs = [...yieldTransactions];
         if (filters.selectedType !== 'Todos') {
             txs = txs.filter(t => t.assetClass === filters.selectedType);
         }
+        if (filters.selectedTicker && filters.selectedTicker !== 'Todos') txs = txs.filter(t => t.ticker === filters.selectedTicker);
         // Ordena histórico em ordem decrescente (mais recente primeiro)
         txs.sort((a, b) => b.sortDate.localeCompare(a.sortDate));
         
         // ----- Popula Sidebar (Estes valores refletem o filtro de TIPO, mas geralmente mostram os últimos 12 meses globais se ano=Todos) -----
-        let sidebarTxs = [...yieldTransactions]; // Sidebar costuma ser global ou seguir apenas o tipo
-        if (filters.selectedType !== 'Todos') {
-            sidebarTxs = sidebarTxs.filter(t => t.assetClass === filters.selectedType);
-        }
+        let sidebarTxs = [...txs];
         
         const sidebarTotal = sidebarTxs.reduce((acc, t) => acc + t.valTotal, 0);
         document.getElementById('prov-total-carteira').textContent = sidebarTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const contextLabel = filters.selectedTicker && filters.selectedTicker !== 'Todos' ? filters.selectedTicker : 'Todos os fundos';
+        const totalLabel = document.getElementById('prov-total-label');
+        if (totalLabel) totalLabel.textContent = filters.selectedTicker && filters.selectedTicker !== 'Todos' ? `Total do ${filters.selectedTicker}` : 'Total da carteira';
+        const histContext = document.getElementById('prov-hist-context');
+        if (histContext) histContext.textContent = contextLabel;
         
         // Identifica meses consolidados para extrair os últimos 12 meses
         const monthKeys = [...new Set(txs.map(t => t.monthKey))].sort((a,b) => b.localeCompare(a));
@@ -1936,7 +1958,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const listTbody = document.getElementById('prov-list-tbody');
         if (listTbody) {
             listTbody.innerHTML = '';
-            let lTotal = 0;
+            let lTotal = txs.reduce((sum, t) => sum + t.valTotal, 0);
             if (txs.length > 0) {
                 // Collect unique FII tickers for next-dividend lookup
                 const fiiiTickers = [...new Set(
@@ -1946,8 +1968,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 )];
 
                 // Monta tabela inicialmente com "..." na coluna Próx. Pagto para FIIs
-                txs.forEach(t => {
-                    lTotal += t.valTotal;
+                const visibleTxs = filters.showAll ? txs : txs.slice(0, 20);
+                visibleTxs.forEach(t => {
                     let divValStr = t.quant > 0 ? (t.valTotal / t.quant).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '-';
                     let qStr = t.quant > 0 ? t.quant.toLocaleString('pt-BR') : '-';
                     const cleanTicker = t.ticker.replace(/\.SA$/i, '').toUpperCase();
@@ -1973,6 +1995,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 document.getElementById('prov-list-total').textContent = lTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                const listToggle = document.getElementById('prov-list-toggle');
+                if (listToggle) {
+                    listToggle.classList.toggle('hidden', txs.length <= 20);
+                    listToggle.textContent = filters.showAll ? 'Mostrar 20 mais recentes' : `Ver todos (${txs.length})`;
+                }
 
                 // Busca assíncrona das datas — não bloqueia a UI
                 if (fiiiTickers.length > 0 && window.api && window.api.getNextDividends) {
@@ -2004,6 +2031,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 listTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 20px;">Nenhum provento recebido ainda.</td></tr>`;
                 document.getElementById('prov-list-total').textContent = lTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                document.getElementById('prov-list-toggle')?.classList.add('hidden');
             }
         }
     }

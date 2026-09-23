@@ -885,7 +885,7 @@
                             <hr style="border: none; border-top: 1px solid var(--border-color); margin: 24px 0;">
 
                             <div class="provento-summary-item">
-                                <span class="kpi-subtext-label">Total da carteira</span>
+                                <span class="kpi-subtext-label" id="prov-total-label">Total da carteira</span>
                                 <div class="provento-val-row mt-8">
                                     <span class="kpi-value" id="prov-total-carteira" style="font-size: 1.2rem;">R$ 0,00</span>
                                 </div>
@@ -897,9 +897,6 @@
                                 <span class="kpi-subtext-label" style="margin-bottom: 16px; display: block;">Distribuição de proventos em 12 meses</span>
                                 <div class="chart-container-small" style="height: 200px; position: relative; display: flex; align-items: center; justify-content: center;">
                                     <canvas id="proventosDonutChart"></canvas>
-                                </div>
-                                <div style="text-align: right; margin-top: 16px;">
-                                    <a href="#" style="color: var(--text-primary); font-size: 0.85rem; text-decoration: none;">Ver todos</a>
                                 </div>
                             </div>
                         </div>
@@ -917,6 +914,10 @@
                                         <button class="active" id="prov-btn-mensal">Mensal</button>
                                         <button id="prov-btn-anual">Anual</button>
                                     </div>
+                                    <label class="sr-only" for="prov-filter-fundo">Filtrar por fundo imobiliário</label>
+                                    <select class="select-sm" id="prov-filter-fundo">
+                                        <option value="Todos">Todos os fundos</option>
+                                    </select>
                                     <select class="select-sm" id="prov-filter-tipo">
                                         <option value="Todos">Tipo de ativo</option>
                                     </select>
@@ -934,7 +935,7 @@
                         <!-- Histórico Mensal (Table 1) -->
                         <div class="card proventos-table-card mt-24">
                             <div class="card-header proventos-card-header">
-                                <h3 style="font-size: 1.1rem; color: var(--text-primary);">Histórico mensal</h3>
+                                <h3 style="font-size: 1.1rem; color: var(--text-primary);">Histórico mensal <small id="prov-hist-context" class="provento-filter-context">Todos os fundos</small></h3>
                                 <div class="filter-group">
                                     <span style="font-size: 0.9rem; color: var(--text-primary); font-weight: 500;">Total <span style="color: var(--primary-color);" id="prov-hist-total">R$ 0,00</span></span>
                                     <select class="select-sm">
@@ -966,6 +967,7 @@
                                 <h3 style="font-size: 1.1rem; color: var(--text-primary);">Meus proventos</h3>
                                 <div class="filter-group">
                                     <span style="font-size: 0.9rem; color: var(--text-primary); font-weight: 500;">Total <span style="color: var(--primary-color);" id="prov-list-total">R$ 0,00</span></span>
+                                    <button type="button" class="btn-outline btn-sm hidden" id="prov-list-toggle">Ver todos</button>
                                 </div>
                             </div>
                             <div class="table-responsive">

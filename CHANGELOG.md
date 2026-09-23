@@ -1,5 +1,12 @@
 # Changelog — VS&A
 
+## v5.3.2 — 23/09/2026
+- Novo filtro por fundo imobiliário na tela de Proventos.
+- Resumo, evolução mensal ou anual, histórico e lista de pagamentos respondem ao fundo selecionado.
+- O total identifica claramente quando representa a carteira inteira ou um ticker específico.
+- A lista detalhada mostra inicialmente os 20 registros mais recentes e permite expandir todos os pagamentos.
+
+
 ## v5.3.1 — 23/09/2026
 - A barra superior do VS&A e os controles da janela permanecem visíveis durante a rolagem.
 - A visão Categorias dos Fundos Imobiliários agora agrupa os ativos em Tijolo, Papel e recebíveis, Fundo de fundos, Híbrido, Desenvolvimento ou Não classificado.
