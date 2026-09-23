@@ -1,5 +1,13 @@
 # Changelog — VS&A
 
+## v5.3.0 — 22/09/2026
+- Nova Central de Saúde da Carteira com sinais de qualidade dos dados, concentração e renda recente.
+- Distribuição por classe e contribuição positiva ou negativa de cada posição.
+- Ranking dos ativos que mais pagaram proventos no histórico importado.
+- Limites pessoais editáveis para concentração por ativo, concentração por classe e janela da renda média.
+- Os indicadores usam apenas dados importados e deixam explícitas cotações indisponíveis ou histórico incompleto.
+
+
 ## v5.2.2 — 20/09/2026
 - Controles de janela coloridos no canto superior direito: minimizar, maximizar, restaurar e fechar.
 - Botões amarelo e verde dos modais agora controlam a janela; o vermelho fecha somente o modal.

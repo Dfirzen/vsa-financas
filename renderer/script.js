@@ -98,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const PAGE_TITLES = {
         'visao-executiva': { title: 'Visão Executiva', subtitle: 'Cockpit Patrimonial Consolidado' },
+        'saude-carteira': { title: 'Saúde da Carteira', subtitle: 'Concentração, renda e qualidade dos dados' },
         'visao-geral': { title: 'Fundos Imobiliários', subtitle: 'Construção de Renda Passiva e Proventos (FIIs)' },
         'screen-acoes': { title: 'Ações', subtitle: 'Carteira de Ações e Empresas Brasileiras' },
         'screen-etfs': { title: 'ETFs', subtitle: 'Fundos de Índice Nacionais e Globais' },
@@ -198,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (targetId === 'analise') window.AnalysisUI?.refresh();
+            if (targetId === 'saude-carteira') window.HealthUI?.render();
 
             // Antigravity GSAP Animation
             if (typeof gsap !== 'undefined') {
@@ -1270,6 +1272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         let currentPatrimonioReal = 0;
+        let quoteStatuses = {};
         let quotesIncomplete = false;
         Object.values(categories).forEach(cat => Object.values(cat.ativos).forEach(a => { a.currentPrice = a.avgPrice; a.quoteUnavailable = true; }));
 
@@ -1277,6 +1280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 let quotes = await window.api.getQuotes(allTickers, forceRefresh);
                 const statuses = await window.api.getQuoteStatus(allTickers);
+                quoteStatuses = statuses || {};
                 quotesIncomplete = allTickers.some(t => statuses[t]?.refreshFailed || statuses[t]?.stale || quotes[t] === undefined);
                 if (window.globalYear === 'Todos' || +window.globalYear >= new Date().getFullYear()) {
                     allTickers.filter(t => statuses[t]?.refreshFailed || (statuses[t]?.stale && quotes[t] !== undefined)).forEach(t => {
@@ -1353,7 +1357,8 @@ document.addEventListener('DOMContentLoaded', () => {
             monthlyYields: monthlyYields,
             yieldTransactions: yieldTransactions,
             investTransactions: investTransactions,
-            proventosTotais: proventosTotais
+            proventosTotais: proventosTotais,
+            quoteStatuses: quoteStatuses
         };
 
         window.proventoFilters = window.proventoFilters || {
@@ -1384,6 +1389,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Atualiza o Cockpit Executivo Consolidado
         renderExecutiveDashboard();
+        window.HealthUI?.render();
         await historyReady;
         return {quotesIncomplete};
     }
